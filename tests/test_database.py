@@ -3,37 +3,37 @@ import requests
 from dotenv import load_dotenv
 from supabase import create_client
 
-# טעינת משתני סביבה
+# Load environment variables
 load_dotenv()
 
 def check_dependencies():
-    print("🔍 1. בודק התקנות...")
+    print("🔍 1. Checking installations...")
     try:
         import fastapi
         import supabase
         import yfinance
-        print("✅ כל הספריות מותקנות כשורה.")
+        print("✅ All libraries are installed correctly.")
     except ImportError as e:
-        print(f"❌ חסרה ספרייה: {e}. הרץ: pip install -r requirements.txt")
+        print(f"❌ Missing library: {e}. Run: pip install -r requirements.txt")
 
 def check_supabase():
-    print("\n☁️ 2. בודק חיבור לענן (Supabase)...")
+    print("\n☁️ 2. Checking cloud connection (Supabase)...")
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
     
     if not url or not key:
-        print("❌ שגיאה: מפתחות Supabase חסרים בקובץ ה-.env")
+        print("❌ Error: Supabase keys are missing in the .env file")
         return
 
     try:
         supabase = create_client(url, key)
-        # ניסיון קריאה פשוט מהטבלה שיצרנו
+        # Simple read attempt from the table we created
         supabase.table("stocks_watchlist").select("id").limit(1).execute()
-        print("✅ החיבור ל-Supabase תקין!")
+        print("✅ Connection to Supabase is valid!")
     except Exception as e:
-        print(f"❌ שגיאה בחיבור לענן: {e}")
+        print(f"❌ Error connecting to cloud: {e}")
 
 if __name__ == "__main__":
-    print("=== פרויקט סיום: בדיקת תקינות מערכת ===\n")
+    print("=== Final Project: System Integrity Check ===\n")
     check_dependencies()
     check_supabase()
