@@ -1,0 +1,35 @@
+# --- Frontend (Desktop UI) ---
+# Requirement: PySide 6/6.5 for MVP pattern [cite: 17]
+PySide6==6.5.0
+# Requirement: Visualization via QTCharts [cite: 17]
+shiboken6==6.5.0
+
+# --- Backend & API ---
+# Requirement: FastAPI for the application server 
+fastapi
+supabase
+python-dotenv
+# Requirement: Server for running FastAPI 
+uvicorn[standard]
+yfinance
+# Requirement: API Gateway communication [cite: 19]
+requests
+httpx
+
+# --- Data & Persistence ---
+# Requirement: Event Sourcing & Cloud DB (somee.com) 
+sqlmodel
+psycopg2-binary
+
+# --- AI & Integration ---
+# Requirement: Sentiment analysis via Hugging Face Hub 
+huggingface-hub
+# Requirement: AI Agent & automation (Langchain/Ollama) 
+langchain
+langchain-community
+
+# --- Utilities & Options ---
+# Requirement: Image storage (Optional) [cite: 23]
+cloudinary
+# Environment variables management
+python-dotenv
