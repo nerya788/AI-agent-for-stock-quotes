@@ -1,26 +1,39 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-# העדכון כאן: אנחנו מייבאים מתוך התיקייה החדשה repository
+from server.gateway.stock_api import StockGateway
 from server.repository.stock_repository import StockRepository
+from pydantic import BaseModel
+
 app = FastAPI(title="Stock Quotes AI Agent Gateway")
 repo = StockRepository()
+stock_gw = StockGateway()
 
-# הגדרת מודל הנתונים לבקשה
-class StockCreate(BaseModel):
-    symbol: str
-    price: float
+@app.get("/")
+async def root():
+    return {
+        "message": "Welcome to the Stock Quotes AI Agent API",
+        "status": "Online",
+        "documentation": "/docs"
+    }
 
-@app.post("/stocks/watchlist")
-async def add_stock(stock: StockCreate):
+@app.get("/stocks/quote/{symbol}")
+async def get_stock_price(symbol: str):
     """
-    נקודת קצה המקבלת פקודת כתיבה ומנתבת אותה ל-Command Model [cite: 51]
+    Query Model: Fetches live stock price using the Gateway.
     """
-    try:
-        result = repo.add_to_watchlist(stock.symbol, stock.price)
-        return {"status": "success", "data": result.data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    data = stock_gw.get_live_quote(symbol)
+    if not data:
+        raise HTTPException(status_code=404, detail="Stock symbol not found or service unavailable")
+    return data
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+@app.post("/stocks/watchlist/auto")
+async def add_live_stock_to_db(symbol: str):
+    """
+    Combination of Gateway and Command Model: 
+    Fetches live price and automatically saves it to the cloud.
+    """
+    live_data = stock_gw.get_live_quote(symbol)
+    if not live_data:
+        raise HTTPException(status_code=400, detail="Could not fetch live price")
+    
+    result = repo.add_to_watchlist(live_data["symbol"], live_data["price"])
+    return {"message": "Saved to cloud", "data": result.data}
