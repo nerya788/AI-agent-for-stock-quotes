@@ -3,10 +3,33 @@ from server.gateway.stock_api import StockGateway
 from server.repository.stock_repository import StockRepository
 from langchain_community.llms import Ollama
 from pydantic import BaseModel
+from server.repository.auth_repository import AuthRepository
+from pydantic import BaseModel
 
 app = FastAPI(title="Stock Quotes AI Agent Gateway")
 repo = StockRepository()
 stock_gw = StockGateway()
+auth_repo = AuthRepository()
+
+class UserAuth(BaseModel):
+    email: str
+    password: str
+    full_name: str = None
+
+@app.post("/auth/register")
+async def register(user: UserAuth):
+    try:
+        result = auth_repo.register_user(user.email, user.password, user.full_name)
+        return {"status": "success", "data": result.data}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/auth/login")
+async def login(user: UserAuth):
+    result = auth_repo.get_user_by_email(user.email)
+    if not result.data or result.data[0]['password_hash'] != user.password:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {"status": "success", "user": result.data[0]}
 
 @app.get("/")
 async def root():
