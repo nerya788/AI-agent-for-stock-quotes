@@ -36,3 +36,28 @@ class StockGateway:
         except Exception as e:
             print(f"❌ Gateway error: {e}")
             return None
+
+    @staticmethod
+    def get_history(symbol: str, period="1mo"):
+        """
+        New function for UI Graph: Fetches historical data.
+        """
+        try:
+            stock = yf.Ticker(symbol)
+            # Fetch history
+            hist = stock.history(period=period)
+
+            if hist.empty:
+                return []
+
+            # Convert to list of dictionaries for the JSON response
+            data = []
+            for date, row in hist.iterrows():
+                data.append({
+                    "date": date.strftime('%Y-%m-%d'),
+                    "price": round(float(row['Close']), 2)
+                })
+            return data
+        except Exception as e:
+            print(f"❌ History error: {e}")
+            return []
