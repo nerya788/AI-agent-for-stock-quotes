@@ -1,8 +1,9 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout
-# ייבוא מהמיקומים החדשים
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QMessageBox
 from client.modules.auth.view.login_view import LoginView
 from client.modules.auth.view.register_view import RegisterView
 from client.core.api_client import APIClient
+# וודא שהמודל קיים במיקום הזה
+from client.modules.auth.models.user_model import UserModel
 
 class AuthController(QWidget):
     def __init__(self, app_controller):
@@ -47,38 +48,49 @@ class AuthController(QWidget):
         self.current_view.show()
 
     def handle_login(self):
-            email = self.login_view.email_input.text()
-            password = self.login_view.pass_input.text()
-            
-            # 1. בדיקת קלט
-            if not email or not password:
-                print("Error: Missing fields") # או שתשתמש ב-QMessageBox
-                return
+        email = self.login_view.email_input.text()
+        password = self.login_view.pass_input.text()
+        
+        # 1. ולידציה בסיסית
+        if not email or not password:
+            QMessageBox.warning(self, "שגיאה", "נא למלא את כל השדות")
+            return
 
-            print(f"📡 Auth Controller: Sending login request for {email}...")
+        print(f"📡 Auth Controller: Sending login request for {email}...")
+        
+        try:
+            # 2. שליחה לשרת
+            response = self.api.login(email, password)
             
-            try:
-                # 2. שליחה לשרת האמיתי
-                response = self.api.login(email, password)
+            # 3. בדיקת הצלחה
+            if response and response.get("status") == "success":
+                # --- כאן השינוי הגדול (MVC) ---
                 
-                # 3. בדיקת התשובה
-                if response and response.get("status") == "success":
-                    print("✅ Login Successful!")
-                    user_name = response.get("user", {}).get("full_name", "User")
-                    
-                    # עדכון השם בדשבורד (דרך ה-AppController)
-                    # נניח שיש פונקציה כזו ב-AppController, אם לא - לא נורא כרגע
-                    # self.app.set_user_context(user_name)
-                    
-                    # מעבר לדף הבא
-                    self.app.navigate_to_portfolio()
-                else:
-                    print(f"❌ Login Failed: {response}")
-                    # כאן כדאי להקפיץ הודעת שגיאה למשתמש
-                    
-            except Exception as e:
-                print(f"❌ Connection Error: {e}")
+                # א. המרת המידע הגולמי למודל חכם
+                user_data = response.get("user", {})
+                user_model = UserModel.from_json(user_data)
+                
+                print(f"✅ Login Successful! User: {user_model.full_name}")
+                
+                # ב. עדכון ה-Session באפליקציה הראשית
+                self.app.set_user_session(user_model)
+                
+                # ג. מעבר מסך
+                self.app.navigate_to_portfolio()
+            else:
+                # כישלון בהתחברות (סיסמה שגויה וכו')
+                error_msg = response.get("detail", "Login failed")
+                print(f"❌ Login Failed: {error_msg}")
+                QMessageBox.warning(self, "שגיאת התחברות", str(error_msg))
+                
+        except Exception as e:
+            # שגיאת רשת או קריסה
+            print(f"❌ Connection Error: {e}")
+            QMessageBox.critical(self, "שגיאת מערכת", f"לא ניתן להתחבר לשרת:\n{e}")
 
     def handle_register(self):
-        print("Auth Module: Registering...")
+        # לוגיקה לרישום (אפשר להרחיב בהמשך)
+        email = self.register_view.email_input.text()
+        print(f"Auth Module: Registering {email}...")
+        # כרגע נחזיר אותו ללוגין אחרי לחיצה
         self.show_login()
