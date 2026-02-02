@@ -89,8 +89,46 @@ class AuthController(QWidget):
             QMessageBox.critical(self, "שגיאת מערכת", f"לא ניתן להתחבר לשרת:\n{e}")
 
     def handle_register(self):
-        # לוגיקה לרישום (אפשר להרחיב בהמשך)
+        # קבלת הנתונים מהטופס
+        full_name = self.register_view.name_input.text()
         email = self.register_view.email_input.text()
-        print(f"Auth Module: Registering {email}...")
-        # כרגע נחזיר אותו ללוגין אחרי לחיצה
-        self.show_login()
+        password = self.register_view.pass_input.text()
+        
+        # ולידציה בסיסית
+        if not email or not password or not full_name:
+            QMessageBox.warning(self, "שגיאה", "נא למלא את כל השדות")
+            return
+        
+        if len(password) < 6:
+            QMessageBox.warning(self, "שגיאה", "הסיסמה חייבת להכיל לפחות 6 תווים")
+            return
+        
+        print(f"📡 Auth Controller: Sending register request for {email}...")
+        
+        try:
+            # שליחה לשרת
+            response = self.api.register(email, password, full_name)
+            
+            print(f"📥 Response: {response}")
+            
+            # בדיקת הצלחה
+            if response and response.get("status") == "success":
+                print(f"✅ Registration Successful for {email}")
+                QMessageBox.information(self, "הצלחה! 🎉", 
+                    f"המשתמש {full_name} נרשם בהצלחה!\nכעת תוכל להתחבר.")
+                
+                # ניקוי השדות ומעבר ללוגין
+                self.register_view.name_input.clear()
+                self.register_view.email_input.clear()
+                self.register_view.pass_input.clear()
+                self.show_login()
+            else:
+                # כישלון ברישום
+                error_msg = response.get("detail", "Registration failed")
+                print(f"❌ Registration Failed: {error_msg}")
+                QMessageBox.warning(self, "שגיאת רישום", str(error_msg))
+                
+        except Exception as e:
+            # שגיאת רשת או קריסה
+            print(f"❌ Registration Error: {e}")
+            QMessageBox.critical(self, "שגיאת מערכת", f"לא ניתן להתחבר לשרת:\n{e}")

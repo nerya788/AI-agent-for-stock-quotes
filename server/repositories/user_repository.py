@@ -11,8 +11,11 @@ class UserRepository:
                 "password_hash": password, 
                 "full_name": name
             }
+            print(f"📝 UserRepository: Creating user {email}...")
             # שימוש בפונקציית העזר הגנרית insert
-            return self.dal.insert("users", user_data)
+            result = self.dal.insert("users", user_data)
+            print(f"✅ User created: {result}")
+            return result
 
     def find_user_by_email(self, email):
         # שימוש בפונקציית העזר הגנרית select

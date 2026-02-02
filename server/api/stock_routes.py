@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from server.services.stock_service import StockService
 from server.services.ai_service import AIService
 from server.repositories.stock_repository import StockRepository
@@ -10,6 +11,14 @@ router = APIRouter(prefix="/stocks", tags=["Stocks"])
 stock_service = StockService()   # מביא נתונים (Gateway לשעבר)
 ai_service = AIService()         # מנתח נתונים (Ollama)
 stock_repo = StockRepository()   # שומר נתונים (Supabase)
+
+# מודל לבקשת תכנית השקעה
+class InvestmentPlanRequest(BaseModel):
+    amount: str
+    sector: str
+    risk: str
+    availability: str
+    location: str
 
 # 1. קבלת מחיר מניה בזמן אמת
 @router.get("/quote/{symbol}")
@@ -50,3 +59,45 @@ async def analyze_stock(symbol: str):
     # שלב ב': שליחה למוח של ה-AI (נמצא ב-services/ai_service.py)
     analysis = ai_service.analyze_stock(data['symbol'], data['price'])
     return {"analysis": analysis}
+
+# 5. תכנית השקעה מותאמת אישית
+@router.post("/ai-investment-plan")
+async def generate_investment_plan(request: InvestmentPlanRequest):
+    """
+    סוכן AI ליצירת תכנית השקעה מותאמת
+    """
+    print(f"📊 Stock Routes: Generating investment plan...")
+    print(f"   Amount: ${request.amount}")
+    print(f"   Sector: {request.sector}")
+    print(f"   Risk: {request.risk}")
+    
+    try:
+        # בניית ה-prompt לAI
+        prompt = f"""
+You are a professional investment advisor. Based on the following client profile, provide a detailed investment plan:
+
+Client Profile:
+- Investment Amount: ${request.amount}
+- Preferred Sector: {request.sector}
+- Risk Tolerance: {request.risk}
+- Investment Availability: {request.availability}
+- Market Focus: {request.location}
+
+Please provide:
+1. Top 5 stock recommendations (with allocation percentages)
+2. Risk assessment and expected returns
+3. Diversification strategy
+4. Implementation timeline
+
+Format your response clearly with sections and bullet points.
+        """
+        
+        # שליחה ל-AI Service
+        recommendation = ai_service.generate_investment_plan(prompt)
+        
+        print(f"✅ Investment plan generated")
+        return {"recommendation": recommendation}
+        
+    except Exception as e:
+        print(f"❌ Error generating investment plan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
