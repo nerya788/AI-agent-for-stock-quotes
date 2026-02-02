@@ -18,9 +18,15 @@ class APIClient:
                 return {"status": "error", "detail": str(e)}
 
     def register(self, email, password, full_name):
-        response = requests.post(f"{self.base_url}/auth/register", json={
-            "email": email,
-            "password": password,
-            "full_name": full_name
-        })
+        try:
+            response = requests.post(f"{self.base_url}/auth/register", json={
+                "email": email,
+                "password": password,
+                "full_name": full_name
+            })
+            if response.status_code == 200:
+                return response.json()
+            return {"status": "error", "detail": response.text}
+        except Exception as e:
+            return {"status": "error", "detail": str(e)}
         return response.json()

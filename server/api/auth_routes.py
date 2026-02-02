@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from server.repositories.user_repository import UserRepository
+from server.repositories.auth_repository import AuthRepository
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-user_repo = UserRepository()
+auth_repo = AuthRepository()
 
 # מודל הנתונים (נשאר זהה)
 class UserAuth(BaseModel):
@@ -15,22 +15,45 @@ class UserAuth(BaseModel):
 @router.post("/register")
 async def register(user: UserAuth):
     try:
-        # פנייה ל-Repository שיצרנו קודם
-        result = user_repo.create_user(user.email, user.password, user.full_name)
-        return {"status": "success", "data": result.data}
+        print(f"📡 Auth Routes: Register request for {user.email}")
+        # שימוש ב-Supabase Authentication
+        response = auth_repo.register_user(user.email, user.password, user.full_name)
+        
+        if response.user:
+            return {
+                "status": "success", 
+                "user": {
+                    "id": response.user.id,
+                    "email": response.user.email,
+                    "full_name": user.full_name or response.user.user_metadata.get("full_name", "User")
+                }
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Registration failed")
+            
     except Exception as e:
+        print(f"❌ Register error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/login")
 async def login(user: UserAuth):
-    # שים לב: כאן הוספנו לוגיקה שהייתה ב-Main הישן
-    found_user = user_repo.find_user_by_email(user.email)
-    
-    if not found_user: 
-        raise HTTPException(status_code=401, detail="User not found")
+    try:
+        print(f"📡 Auth Routes: Login request for {user.email}")
+        # שימוש ב-Supabase Authentication
+        response = auth_repo.login_user(user.email, user.password)
         
-    # בדיקת סיסמה (בפרויקט אמיתי עושים כאן Verify Hash)
-    if found_user['password_hash'] != user.password:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-        
-    return {"status": "success", "user": found_user}
+        if response.user:
+            return {
+                "status": "success",
+                "user": {
+                    "id": response.user.id,
+                    "email": response.user.email,
+                    "full_name": response.user.user_metadata.get("full_name", "User")
+                }
+            }
+        else:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+            
+    except Exception as e:
+        print(f"❌ Login error: {str(e)}")
+        raise HTTPException(status_code=401, detail=str(e))
