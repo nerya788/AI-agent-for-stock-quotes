@@ -17,11 +17,19 @@ class DashboardView(QWidget):
         self.user_label = QLabel("Welcome, User!")
         self.user_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #89b4fa;")
         sidebar.addWidget(self.user_label)
+
+        self.logout_btn = QPushButton("🚪 Logout")
+        self.logout_btn.setStyleSheet("background-color: #f38ba8; color: #11111b; margin-top: 20px;")
+        sidebar.addWidget(self.logout_btn)
         
         self.ai_consult_btn = QPushButton("🤖 AI Advisor")
         self.ai_consult_btn.setStyleSheet("background-color: #f5c2e7; color: #11111b;")
         sidebar.addWidget(self.ai_consult_btn)
         
+        self.explorer_btn = QPushButton("📈 Market Explorer")
+        self.explorer_btn.setStyleSheet("background-color: #89dceb; color: #11111b; margin-top: 10px;")
+        sidebar.addWidget(self.explorer_btn)
+
         sidebar.addStretch() # דוחף הכל למעלה
         
         layout.addLayout(sidebar, 1)
