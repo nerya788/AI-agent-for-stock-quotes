@@ -26,7 +26,7 @@ class ExplorerView(QWidget):
         
         self.search_btn = QPushButton("Search & Analyze 🔍")
         self.search_btn.setStyleSheet("background-color: #89b4fa; color: #1e1e2e; padding: 8px; font-weight: bold;")
-        
+
         search_layout.addWidget(self.symbol_input)
         search_layout.addWidget(self.search_btn)
         layout.addLayout(search_layout)
@@ -55,12 +55,18 @@ class ExplorerView(QWidget):
         self.save_btn.setStyleSheet("background-color: #a6e3a1; color: #1e1e2e; padding: 10px; font-weight: bold;")
         self.save_btn.setEnabled(False)
 
+        # ... בתוך actions_layout ...
+        self.trade_btn = QPushButton("💰 Buy Stock")
+        self.trade_btn.setStyleSheet("background-color: #fab387; color: #1e1e2e; padding: 10px; font-weight: bold;")
+        self.trade_btn.setEnabled(False) # לא פעיל עד שמוצאים מניה
+
         self.back_btn = QPushButton("⬅️ Back to Dashboard")
         self.back_btn.setStyleSheet("background-color: #45475a; color: white; padding: 10px;")
 
         actions_layout.addWidget(self.ai_btn)
         actions_layout.addWidget(self.save_btn)
         actions_layout.addWidget(self.back_btn)
+        actions_layout.addWidget(self.trade_btn)
         layout.addLayout(actions_layout)
 
         # --- תוצאת ה-AI ---

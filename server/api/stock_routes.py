@@ -60,6 +60,19 @@ async def analyze_stock(symbol: str):
     analysis = ai_service.analyze_stock(data['symbol'], data['price'])
     return {"analysis": analysis}
 
+@router.get("/watchlist")
+def get_watchlist():
+    """
+    שליפת תיק ההשקעות של המשתמש
+    """
+    try:
+        response = stock_repo.get_watchlist()
+        # ב-Supabase התשובה מגיעה בתוך .data
+        return response.data if hasattr(response, 'data') else response
+    except Exception as e:
+        print(f"Error fetching watchlist: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # 5. תכנית השקעה מותאמת אישית
 @router.post("/ai-investment-plan")
 async def generate_investment_plan(request: InvestmentPlanRequest):

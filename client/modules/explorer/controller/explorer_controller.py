@@ -16,6 +16,8 @@ class ExplorerController:
         self.view.ai_btn.clicked.connect(self.handle_ai)
         self.view.save_btn.clicked.connect(self.handle_save)
         self.view.back_btn.clicked.connect(self.handle_back)
+        self.view.trade_btn.clicked.connect(self.open_trade_window)
+
 
     def handle_search(self):
         symbol = self.view.symbol_input.text().upper().strip()
@@ -29,6 +31,7 @@ class ExplorerController:
             self.view.info_label.setText(f"Stock: {data['symbol']} | Price: ${data['price']}")
             self.view.ai_btn.setEnabled(True)
             self.view.save_btn.setEnabled(True)
+            self.view.trade_btn.setEnabled(True)
             
             # 2. קבלת היסטוריה לגרף (רשימת מחירים)
             history = self.api.get_stock_history(symbol)
@@ -41,6 +44,7 @@ class ExplorerController:
                 self.view.plot_chart(symbol, formatted_data)
         else:
             self.view.info_label.setText("Stock not found.")
+            self.view.trade_btn.setEnabled(False)
 
     def handle_ai(self):
         symbol = self.view.symbol_input.text().upper().strip()
@@ -74,3 +78,21 @@ class ExplorerController:
         print("⬅️ Going back to Dashboard...")
         if hasattr(self.app, 'navigate_to_portfolio'):
             self.app.navigate_to_portfolio()
+    
+    # פונקציה חדשה ב-ExplorerController:
+    def open_trade_window(self):
+        symbol = self.view.symbol_input.text().upper()
+        # אנחנו צריכים את המחיר הנוכחי - נניח שהוא שמור ב-label או ב-model
+        # לצורך הדוגמה נשלוף מהטקסט (במציאות עדיף לשמור במשתנה)
+        price_text = self.view.info_label.text().split("$")[-1]
+        try:
+            price = float(price_text)
+            
+            # יבוא ה-Controller החדש (בתוך הפונקציה כדי למנוע מעגליות)
+            from client.modules.trade.controller.trade_controller import TradeController
+            
+            trade_dialog = TradeController(self.view)
+            trade_dialog.open_purchase_window(symbol, price)
+            
+        except ValueError:
+            print("Error parsing price")
