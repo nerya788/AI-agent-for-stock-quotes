@@ -38,6 +38,13 @@ class PortfolioController(QWidget):
         
         # כפתור חזרה לדשבורד
         self.investment_view.back_btn.clicked.connect(self.show_dashboard)
+        
+        # חיבור כפתור ההתנתקות (Logout) - וודא שהוא קיים ב-DashboardView
+        if hasattr(self.dashboard_view, 'logout_btn'):
+            self.dashboard_view.logout_btn.clicked.connect(self.handle_logout)
+        
+        if hasattr(self.dashboard_view, 'explorer_btn'):
+            self.dashboard_view.explorer_btn.clicked.connect(self.open_explorer)
 
     def show_investment(self):
         self.stack.setCurrentWidget(self.investment_view)
@@ -61,61 +68,56 @@ class PortfolioController(QWidget):
             QMessageBox.warning(self.investment_view, "שגיאה", "נא להכניס סכום השקעה")
             return
         
-        print(f"📊 PortfolioController: Generating AI recommendation...")
-        print(f"   Amount: ${amount}")
-        print(f"   Sector: {sector}")
-        print(f"   Risk: {risk}")
-        print(f"   Availability: {availability}")
-        print(f"   Location: {location}")
-        
         # הודעה בממשק שמעבדים + השבתת כפתור
         self.investment_view.submit_btn.setEnabled(False)
         self.investment_view.submit_btn.setText("⏳ Loading...")
-        self.investment_view.ai_response_box.setText("🔄 Processing your investment plan with AI...\nThis may take a few seconds. Please wait...")
+        self.investment_view.ai_response_box.setText("🔄 Processing your investment plan with AI...")
         
         try:
-            # בניית בקשה לשרת
-            prompt = f"""
-            Create an investment plan for a client with:
-            - Investment Amount: ${amount}
-            - Preferred Sector: {sector}
-            - Risk Tolerance: {risk}
-            - Investment Availability: {availability}
-            - Market Focus: {location}
-            
-            Provide specific stock recommendations, allocation percentages, and risk assessment.
-            """
-            
-            # שליחה לשרת (ל-AI analyze endpoint)
-            response = requests.post(f"http://127.0.0.1:8000/stocks/ai-investment-plan", json={
+            # שימוש ב-API Client במקום requests ישיר (יותר נכון ארכיטקטונית)
+            data = {
                 "amount": amount,
                 "sector": sector,
                 "risk": risk,
                 "availability": availability,
                 "location": location
-            }, timeout=120)  # הגדלת timeout ל-2 דקות
+            }
+            
+            # אם כבר הוספת את הפונקציה ב-APIClient תשתמש בה, אם לא - נשתמש ב-requests ישירות לבינתיים
+            # response = self.api.get_investment_plan(data)
+            
+            response = requests.post(f"http://127.0.0.1:8000/stocks/ai-investment-plan", json=data, timeout=120)
             
             if response.status_code == 200:
                 result = response.json()
                 recommendation = result.get("recommendation", "No recommendation available")
-                
-                # הצגת התוצאה בתיבה
                 self.investment_view.ai_response_box.setText(recommendation)
-                print(f"✅ AI Recommendation generated successfully")
             else:
                 error_msg = response.json().get("detail", "Unknown error")
                 self.investment_view.ai_response_box.setText(f"❌ Error: {error_msg}")
-                print(f"❌ AI Error: {error_msg}")
                 
-        except requests.exceptions.Timeout:
-            error_msg = "⏱️ AI analysis in progress... This may take up to 2 minutes for Llama3. Please wait."
-            self.investment_view.ai_response_box.setText(error_msg)
-            print(f"⏱️ Timeout (Llama3 processing...)")
         except Exception as e:
             error_msg = f"❌ Connection Error: {str(e)}"
             self.investment_view.ai_response_box.setText(error_msg)
-            print(f"❌ {error_msg}")
         finally:
             # החזרת הכפתור לנורמל
             self.investment_view.submit_btn.setEnabled(True)
             self.investment_view.submit_btn.setText("Generate AI Recommendation 🚀")
+
+    # --- הנה הפונקציה החסרה (חייבת להיות באותו קו הזחה כמו def handle_ai_recommendation) ---
+    def handle_logout(self):
+        """מטפל בלחיצה על כפתור ההתנתקות"""
+        print("👋 Portfolio: Logging out...")
+        # קריאה לפונקציה הראשית ב-AppController
+        if hasattr(self.app, 'logout'):
+            self.app.logout()
+        else:
+            print("❌ Error: AppController does not have a logout method!")
+        
+    def open_explorer(self):
+        """מעבר למודול ה-Explorer דרך האפליקציה הראשית"""
+        print("🚀 Navigating to Market Explorer...")
+        if hasattr(self.app, 'navigate_to_explorer'):
+            self.app.navigate_to_explorer()
+        else:
+            print("❌ Error: AppController missing navigate_to_explorer method")
