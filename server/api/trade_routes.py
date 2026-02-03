@@ -19,6 +19,7 @@ class PurchaseRequest(BaseModel):
     expiration: str
     cvv: str
     save_card: bool
+    user_id: str = None  # ה-UUID של המשתמש מ-Supabase Auth
 
 @router.post("/buy")
 async def buy_stock(req: PurchaseRequest):
@@ -28,9 +29,10 @@ async def buy_stock(req: PurchaseRequest):
     print(f"💰 Processing purchase request for {req.symbol}...")
     
     try:
-        # 1. שמירת כרטיס (אם המשתמש ביקש) - פעולה פשוטה אפשר לעשות כאן או ב-Repo
+        # 1. שמירת כרטיס (אם המשתמש ביקש) - כולל user_id
         if req.save_card:
             dal.table("saved_cards").insert({
+                "user_id": req.user_id,  # הוסף את user_id
                 "card_holder": req.card_holder,
                 "card_number": req.card_number,
                 "expiration": req.expiration,
@@ -51,4 +53,19 @@ async def buy_stock(req: PurchaseRequest):
     except Exception as e:
         print(f"❌ Purchase failed: {e}")
         # החזרת שגיאה מסודרת ללקוח כדי שיציג הודעה מתאימה
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/saved-cards/{user_id}")
+async def get_saved_cards(user_id: str):
+    """
+    קבלת כל הכרטיסים השמורים של משתמש מסוים
+    """
+    try:
+        response = dal.table("saved_cards").select("*").eq("user_id", user_id).execute()
+        cards = response.data if response.data else []
+        print(f"📋 Retrieved {len(cards)} saved cards for user {user_id}")
+        return {"status": "success", "cards": cards}
+    except Exception as e:
+        print(f"❌ Failed to retrieve saved cards: {e}")
         raise HTTPException(status_code=500, detail=str(e))
