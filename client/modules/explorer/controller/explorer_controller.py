@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMessageBox, QApplication
+from PySide6.QtWidgets import QMessageBox, QApplication, QLabel
 from client.modules.explorer.view.explorer_view import ExplorerView
 from client.core.api_client import APIClient
 import requests # נשתמש בזה לשמירה אם חסר ב-API Client
@@ -17,6 +17,7 @@ class ExplorerController:
         self.view.save_btn.clicked.connect(self.handle_save)
         self.view.back_btn.clicked.connect(self.handle_back)
         self.view.trade_btn.clicked.connect(self.open_trade_window)
+        self.view.browse_btn.clicked.connect(self.show_popular_stocks)
 
 
     def handle_search(self):
@@ -82,17 +83,112 @@ class ExplorerController:
     # פונקציה חדשה ב-ExplorerController:
     def open_trade_window(self):
         symbol = self.view.symbol_input.text().upper()
-        # אנחנו צריכים את המחיר הנוכחי - נניח שהוא שמור ב-label או ב-model
-        # לצורך הדוגמה נשלוף מהטקסט (במציאות עדיף לשמור במשתנה)
         price_text = self.view.info_label.text().split("$")[-1]
         try:
             price = float(price_text)
             
-            # יבוא ה-Controller החדש (בתוך הפונקציה כדי למנוע מעגליות)
             from client.modules.trade.controller.trade_controller import TradeController
             
-            trade_dialog = TradeController(self.view)
+            trade_dialog = TradeController(self.view, self.app)
             trade_dialog.open_purchase_window(symbol, price)
             
         except ValueError:
             print("Error parsing price")
+
+    def show_popular_stocks(self):
+        """הצג רשימת חברות פופולריות מ-Finnhub"""
+        try:
+            self.view.info_label.setText("⏳ Loading popular stocks...")
+            QApplication.processEvents()
+            
+            # קבלת רשימת חברות פופולריות מהשרת דרך APIClient
+            result = self.api.get_popular_stocks()
+            print(f"📊 Popular stocks result: {result}")
+            stocks = result.get('stocks', []) if isinstance(result, dict) else []
+            print(f"📊 Stocks list: {stocks}")
+            
+            if not stocks:
+                QMessageBox.warning(self.view, "No Results", "No popular stocks found.")
+                return
+
+            # יצירת דיאלוג עם רשימת המניות
+            from PySide6.QtWidgets import (QDialog, QVBoxLayout,
+                                         QTableWidget, QTableWidgetItem, QPushButton)
+            from PySide6.QtCore import Qt
+            
+            dialog = QDialog(self.view)
+            dialog.setWindowTitle("Browse Popular Stocks 📊")
+            dialog.setGeometry(100, 100, 1200, 700)
+            dialog.setMinimumSize(1000, 600)
+            dialog.setStyleSheet("background-color: #1e1e2e; color: white;")
+            
+            layout = QVBoxLayout()
+            layout.setContentsMargins(10, 10, 10, 10)
+            layout.setSpacing(10)
+            
+            # הוסף לייבל
+            header = QLabel("Top Stocks from S&P 500")
+            header.setStyleSheet("font-size: 16px; font-weight: bold; color: #89b4fa; margin-bottom: 10px;")
+            layout.addWidget(header)
+            
+            # יצירת טבלה
+            table = QTableWidget()
+            table.setColumnCount(4)
+            table.setHorizontalHeaderLabels(["Symbol", "Name", "Price", "Action"])
+            table.setRowCount(len(stocks))
+            table.setStyleSheet("""
+                QTableWidget { background-color: #313244; gridline-color: #45475a; }
+                QHeaderView::section { background-color: #45475a; color: white; padding: 5px; }
+                QTableWidgetItem { padding: 5px; }
+            """)
+            
+            for row, stock in enumerate(stocks):
+                symbol_item = QTableWidgetItem(stock.get('symbol', 'N/A'))
+                name_item = QTableWidgetItem(stock.get('name', 'N/A')[:40])
+                price_value = stock.get('price')
+                price_item = QTableWidgetItem(
+                    f"${price_value}" if price_value is not None else "N/A"
+                )
+                
+                # כפתור לבחירה
+                select_btn = QPushButton("View")
+                select_btn.setStyleSheet("background-color: #89b4fa; color: #1e1e2e; padding: 5px;")
+                select_btn.clicked.connect(
+                    lambda checked, s=stock.get('symbol'): self.search_stock_from_browse(s, dialog)
+                )
+                
+                table.setItem(row, 0, symbol_item)
+                table.setItem(row, 1, name_item)
+                table.setItem(row, 2, price_item)
+                table.setCellWidget(row, 3, select_btn)
+            
+            table.horizontalHeader().setStretchLastSection(False)
+            from PySide6.QtWidgets import QHeaderView
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+            table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+            table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+            
+            layout.addWidget(table, 1)
+            
+            # כפתור סגירה
+            close_btn = QPushButton("Close")
+            close_btn.setStyleSheet("background-color: #45475a; color: white; padding: 8px;")
+            close_btn.clicked.connect(dialog.close)
+            layout.addWidget(close_btn)
+            
+            dialog.setLayout(layout)
+            dialog.exec()
+                
+        except Exception as e:
+            print(f"❌ Browse stocks error: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self.view, "Error", f"Error loading stocks: {str(e)}")
+            self.view.info_label.setText("Error loading stocks")
+
+    def search_stock_from_browse(self, symbol, dialog):
+        """חיפוש מניה שנבחרה מהרשימה ופתיחת הנתונים"""
+        self.view.symbol_input.setText(symbol)
+        dialog.close()
+        self.handle_search()

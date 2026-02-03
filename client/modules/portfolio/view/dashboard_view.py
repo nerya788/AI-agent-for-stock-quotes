@@ -46,6 +46,7 @@ class DashboardView(QWidget):
         self.stock_table.setHorizontalHeaderLabels(["Symbol", "Price", "Sector", "Change %"])
         self.stock_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.stock_table.setStyleSheet("background-color: #313244; gridline-color: #45475a;")
+        self.stock_table.setEditTriggers(QTableWidget.NoEditTriggers)
         main_content.addWidget(self.stock_table)
 
         layout.addLayout(main_content, 3)

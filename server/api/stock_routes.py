@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from server.services.stock_service import StockService
 from server.services.ai_service import AIService
 from server.repositories.stock_repository import StockRepository
+from server.dal.supabase_client import SupabaseDAL
+from datetime import datetime
 
 # יצירת הראוטר (במקום app = FastAPI)
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
@@ -12,6 +14,12 @@ stock_service = StockService()   # מביא נתונים (Gateway לשעבר)
 ai_service = AIService()         # מנתח נתונים (Ollama)
 stock_repo = StockRepository()   # שומר נתונים (Supabase)
 
+# מודל לשמירת stock event
+class StockEventRequest(BaseModel):
+    user_id: str
+    symbol: str
+    event_type: str
+    payload: dict = {}
 # מודל לבקשת תכנית השקעה
 class InvestmentPlanRequest(BaseModel):
     amount: str
@@ -28,6 +36,84 @@ async def get_stock_price(symbol: str):
         raise HTTPException(status_code=404, detail="Stock symbol not found")
     return data
 
+# 1.1 רשימת חברות פופולריות (Browse Companies)
+@router.get("/popular")
+async def get_popular_stocks():
+    """
+    החזרת רשימת חברות פופולריות לצורך Browse
+    """
+    try:
+        popular = [
+            {"symbol": "AAPL", "name": "Apple Inc."},
+            {"symbol": "MSFT", "name": "Microsoft Corporation"},
+            {"symbol": "NVDA", "name": "NVIDIA Corporation"},
+            {"symbol": "AMZN", "name": "Amazon.com, Inc."},
+            {"symbol": "GOOGL", "name": "Alphabet Inc. Class A"},
+            {"symbol": "META", "name": "Meta Platforms, Inc."},
+            {"symbol": "TSLA", "name": "Tesla, Inc."},
+            {"symbol": "AVGO", "name": "Broadcom Inc."},
+            {"symbol": "NFLX", "name": "Netflix, Inc."},
+            {"symbol": "AMD", "name": "Advanced Micro Devices, Inc."},
+            {"symbol": "CRM", "name": "Salesforce, Inc."},
+            {"symbol": "ORCL", "name": "Oracle Corporation"},
+            {"symbol": "ADBE", "name": "Adobe Inc."},
+            {"symbol": "INTC", "name": "Intel Corporation"},
+            {"symbol": "QCOM", "name": "Qualcomm Incorporated"},
+            {"symbol": "CSCO", "name": "Cisco Systems, Inc."},
+            {"symbol": "PEP", "name": "PepsiCo, Inc."},
+            {"symbol": "COST", "name": "Costco Wholesale Corporation"},
+            {"symbol": "JPM", "name": "JPMorgan Chase & Co."},
+            {"symbol": "KO", "name": "The Coca-Cola Company"}
+        ]
+
+        enriched = []
+        for stock in popular:
+            quote = stock_service.get_live_quote(stock["symbol"])
+            if quote:
+                enriched.append({
+                    "symbol": stock["symbol"],
+                    "name": stock["name"],
+                    "price": quote.get("price")
+                })
+            else:
+                enriched.append({
+                    "symbol": stock["symbol"],
+                    "name": stock["name"],
+                    "price": None
+                })
+
+        return {"stocks": enriched}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 0. שמירת stock event עם user_id
+@router.post("/event")
+async def record_stock_event(event: StockEventRequest):
+    """
+    שמירת אירוע קנייה של מניה עם ה-user_id של המשתמש
+    """
+    try:
+        client = SupabaseDAL.get_instance()
+        
+        data = {
+            "user_id": event.user_id,
+            "symbol": event.symbol.upper(),
+            "event_type": event.event_type,
+            "payload": event.payload,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        response = client.table("stock_events").insert(data).execute()
+        
+        if response.data:
+            print(f"✅ Stock event saved: {event.symbol} for user {event.user_id}")
+            return {"success": True, "data": response.data[0]}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save event")
+            
+    except Exception as e:
+        print(f"❌ Error saving stock event: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 # 2. שמירה אוטומטית בדאטה-בייס (Command Model)
 @router.post("/watchlist/auto")
 async def add_live_stock_to_db(symbol: str):
@@ -71,6 +157,32 @@ def get_watchlist():
         return response.data if hasattr(response, 'data') else response
     except Exception as e:
         print(f"Error fetching watchlist: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/user-purchases/{user_id}")
+async def get_user_purchases(user_id: str):
+    """
+    קבלת כל קניות המניות של משתמש מ-stock_events
+    """
+    try:
+        client = SupabaseDAL.get_instance()
+
+        response = client.table("stock_events") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("event_type", "STOCK_PURCHASED") \
+            .order("created_at", desc=True) \
+            .execute()
+
+        if response.data:
+            print(f"✅ Fetched {len(response.data)} purchases for user {user_id}")
+            return {"success": True, "count": len(response.data), "data": response.data}
+        else:
+            print(f"📭 No purchases found for user {user_id}")
+            return {"success": True, "count": 0, "data": []}
+
+    except Exception as e:
+        print(f"❌ Error fetching user purchases: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
 # 5. תכנית השקעה מותאמת אישית
