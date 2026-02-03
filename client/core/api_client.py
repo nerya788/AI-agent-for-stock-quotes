@@ -53,6 +53,17 @@ class APIClient:
             print(f"API Error (Quote): {e}")
             return None
 
+    def get_popular_stocks(self):
+        """רשימת חברות פופולריות עבור Browse"""
+        try:
+            response = requests.get(f"{self.base_url}/stocks/popular")
+            if response.status_code == 200:
+                return response.json()
+            return {"stocks": []}
+        except Exception as e:
+            print(f"API Error (Popular): {e}")
+            return {"stocks": []}
+
     # --- AI Features ---
     def get_ai_analysis(self, symbol):
         """למודול ה-Advisor"""

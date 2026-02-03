@@ -27,8 +27,12 @@ class ExplorerView(QWidget):
         self.search_btn = QPushButton("Search & Analyze 🔍")
         self.search_btn.setStyleSheet("background-color: #89b4fa; color: #1e1e2e; padding: 8px; font-weight: bold;")
 
+        self.browse_btn = QPushButton("Browse Companies 📊")
+        self.browse_btn.setStyleSheet("background-color: #f38ba8; color: #1e1e2e; padding: 8px; font-weight: bold;")
+
         search_layout.addWidget(self.symbol_input)
         search_layout.addWidget(self.search_btn)
+        search_layout.addWidget(self.browse_btn)
         layout.addLayout(search_layout)
 
         # --- תצוגת נתונים (מחיר) ---

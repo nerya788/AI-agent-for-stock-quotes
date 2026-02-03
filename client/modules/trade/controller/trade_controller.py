@@ -3,8 +3,9 @@ from client.modules.trade.view.purchase_view import PurchaseView
 import requests
 
 class TradeController(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, app_controller=None):
         super().__init__(parent)
+        self.app = app_controller
         self.setModal(True)
         self.setWindowTitle("Trade Window")
         
@@ -48,6 +49,42 @@ class TradeController(QDialog):
                 print("✅ Purchase successful!")
                 QMessageBox.information(self, "Success! 🎉", 
                                       f"Purchase Completed!\nBought {data['amount']} shares of {data['symbol']}.\n\nCheck your Dashboard to see the new stock.")
+                
+                # הוסף למניות ועדכן דשבורד
+                if self.app and hasattr(self.app, 'portfolio_module'):
+                    stock_entry = {
+                        "symbol": data['symbol'],
+                        "price": float(data.get('price', 0)),
+                        "sector": "N/A",
+                        "change_percent": 0,
+                        "amount": int(data.get('amount', 0))
+                    }
+                    self.app.portfolio_module.add_stock_entry(stock_entry)
+
+                # שמור את האירוע ל-stock_events עם user_id
+                if self.app and hasattr(self.app, 'current_user') and self.app.current_user:
+                    try:
+                        event_url = "http://127.0.0.1:8000/stocks/event"
+                        event_data = {
+                            "user_id": self.app.current_user.id,
+                            "symbol": data['symbol'],
+                            "event_type": "STOCK_PURCHASED",
+                            "payload": {
+                                "amount": int(data.get('amount', 0)),
+                                "price": float(data.get('price', 0)),
+                                "total": float(data.get('price', 0)) * int(data.get('amount', 0))
+                            }
+                        }
+                        event_response = requests.post(event_url, json=event_data, timeout=5)
+                        if event_response.status_code == 200:
+                            print(f"✅ Stock event recorded for user {self.app.current_user.id}")
+                            if self.app and hasattr(self.app, 'portfolio_module'):
+                                self.app.portfolio_module.load_watchlist()
+                        else:
+                            print(f"⚠️ Warning: Could not record stock event: {event_response.text}")
+                    except Exception as e:
+                        print(f"⚠️ Warning: Error recording stock event: {e}")
+
                 self.accept() # סוגר את החלון בהצלחה ומחזיר שליטה
             else:
                 try:

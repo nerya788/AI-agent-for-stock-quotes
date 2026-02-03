@@ -31,9 +31,21 @@ GLOBAL_STYLE = """
         border-radius: 8px;
         padding: 10px;
         font-weight: bold;
+        border: 2px solid transparent;
     }
     QPushButton:hover {
         background-color: #b4befe;
+        border: 2px solid #cdd6f4;
+    }
+    QPushButton:pressed {
+        background-color: #89b4fa;
+        border: 2px solid #cdd6f4;
+        padding: 11px 9px 9px 11px;
+    }
+    QPushButton:disabled {
+        background-color: #45475a;
+        color: #6c7086;
+        border: 2px solid #313244;
     }
     QLabel {
         color: #cdd6f4;
@@ -91,6 +103,8 @@ class AppController(QMainWindow):
     def navigate_to_portfolio(self):
         print("Navigation: Moving to Portfolio Module")
         self.stack.setCurrentWidget(self.portfolio_module)
+        if hasattr(self.portfolio_module, "show_dashboard"):
+            self.portfolio_module.show_dashboard()
 
     def navigate_to_explorer(self):
             """מעבר למסך ה-Explorer"""
