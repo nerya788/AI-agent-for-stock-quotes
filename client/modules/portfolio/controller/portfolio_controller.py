@@ -1,4 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QMessageBox, QTableWidgetItem
+from PySide6.QtGui import QColor
 import requests
 # וודא שהקבצים האלו אכן נמצאים בתיקיית views של המודול
 from client.modules.portfolio.view.dashboard_view import DashboardView
@@ -138,52 +139,131 @@ class PortfolioController(QWidget):
 
     def load_watchlist(self):
         """טעינת רשימת המעקב של המשתמש מSupabase"""
+        print("📊 Loading watchlist...")
         if not getattr(self.app, 'current_user', None):
+            print("❌ No current user")
             self.display_stocks([])
             return
 
         user_id = getattr(self.app.current_user, 'id', None)
+        print(f"👤 User ID: {user_id}")
         if not user_id:
+            print("❌ No user ID")
             self.display_stocks([])
             return
 
         try:
             # טעינת קניות מ-stock_events עם user_id
-            response = requests.get(f"http://127.0.0.1:8000/stocks/user-purchases/{user_id}", timeout=5)
+            url = f"http://127.0.0.1:8000/stocks/user-purchases/{user_id}"
+            print(f"🔗 Fetching from: {url}")
+            response = requests.get(url, timeout=5)
+            print(f"📥 Response status: {response.status_code}")
             
             if response.status_code == 200:
-                events = response.json().get("data", [])
+                response_data = response.json()
+                print(f"📊 Response data: {response_data}")
+                events = response_data.get("data", [])
+                print(f"📋 Events count: {len(events)}")
                 
-                # המרת stock_events לפורמט של display_stocks
-                stocks = []
+                # קיבוץ קניות לפי symbol
+                stocks_dict = {}
                 for event in events:
+                    print(f"🔄 Processing event: {event.get('symbol')}")
                     if event.get("event_type") == "STOCK_PURCHASED":
+                        symbol = event.get("symbol")
                         payload = event.get("payload", {})
-                        stock = {
-                            "symbol": event.get("symbol"),
-                            "price": payload.get("price", 0),
-                            "sector": "N/A",
-                            "change_percent": 0,
-                            "amount": payload.get("amount", 0)
-                        }
-                        stocks.append(stock)
+                        buy_price = payload.get("price", 0)
+                        amount = payload.get("amount", 0)
+                        
+                        # קיבוץ לפי symbol
+                        if symbol not in stocks_dict:
+                            stocks_dict[symbol] = {
+                                "symbol": symbol,
+                                "buy_price": buy_price,
+                                "total_amount": 0
+                            }
+                        
+                        stocks_dict[symbol]["total_amount"] += amount
                 
+                # המרה לרשימה עם חישוב המחירים הנוכחיים
+                stocks = []
+                for symbol, data in stocks_dict.items():
+                    buy_price = data["buy_price"]
+                    total_amount = data["total_amount"]
+                    
+                    # קבלת המחיר הנוכחי
+                    current_price = self.get_current_price(symbol)
+                    print(f"💰 {symbol}: buy=${buy_price}, current=${current_price}, qty={total_amount}")
+                    
+                    # חישוב השינוי באחוזים
+                    change_percent = 0
+                    if buy_price > 0 and current_price > 0:
+                        change_percent = ((current_price - buy_price) / buy_price) * 100
+                    
+                    stock = {
+                        "symbol": symbol,
+                        "price": current_price,  # המחיר הנוכחי
+                        "buy_price": buy_price,  # מחיר הקנייה
+                        "sector": "N/A",
+                        "change_percent": round(change_percent, 2),
+                        "amount": total_amount  # הכמות המקובצת
+                    }
+                    stocks.append(stock)
+                
+                print(f"✅ Stocks to display (after grouping): {len(stocks)}")
                 self.display_stocks(stocks)
             else:
+                print(f"❌ Error response: {response.text}")
                 self.display_stocks([])
         except Exception as e:
             print(f"❌ Error loading purchases: {e}")
+            import traceback
+            traceback.print_exc()
             self.display_stocks([])
 
+    def get_current_price(self, symbol):
+        """קבלת המחיר הנוכחי של מניה"""
+        try:
+            quote = self.api.get_live_quote(symbol)
+            if quote and "price" in quote:
+                return quote.get("price")
+            return 0
+        except Exception as e:
+            print(f"⚠️ Error getting current price for {symbol}: {e}")
+            return 0
+
     def display_stocks(self, stocks):
-        """הצגת מניות בטבלה"""
+        """הצגת מניות בטבלה עם קיבוץ כמויות"""
         self.dashboard_view.stock_table.setRowCount(len(stocks))
 
         for row, stock in enumerate(stocks):
-            self.dashboard_view.stock_table.setItem(row, 0, QTableWidgetItem(str(stock.get("symbol", ""))))
-            self.dashboard_view.stock_table.setItem(row, 1, QTableWidgetItem(f"${stock.get('price', 0)}"))
-            self.dashboard_view.stock_table.setItem(row, 2, QTableWidgetItem(str(stock.get("sector", "N/A"))))
-            self.dashboard_view.stock_table.setItem(row, 3, QTableWidgetItem(str(stock.get("change_percent", 0))))
+            symbol = str(stock.get("symbol", ""))
+            current_price = stock.get("price", 0)  # המחיר הנוכחי
+            total_amount = stock.get("amount", 0)  # הכמות המקובצת
+            change_percent = stock.get("change_percent", 0)
+            
+            # צביעת השורה לפי שינוי חיובי או שלילי
+            color = QColor("#a6e3a1") if change_percent >= 0 else QColor("#f38ba8")  # ירוק/אדום
+            
+            # עמודה 0: Symbol
+            self.dashboard_view.stock_table.setItem(row, 0, QTableWidgetItem(symbol))
+            
+            # עמודה 1: המחיר הנוכחי
+            price_item = QTableWidgetItem(f"${current_price:.2f}")
+            price_item.setForeground(color)
+            self.dashboard_view.stock_table.setItem(row, 1, price_item)
+            
+            # עמודה 2: כמות
+            qty_item = QTableWidgetItem(str(int(total_amount)))
+            self.dashboard_view.stock_table.setItem(row, 2, qty_item)
+            
+            # עמודה 3: Sector
+            self.dashboard_view.stock_table.setItem(row, 3, QTableWidgetItem(str(stock.get("sector", "N/A"))))
+            
+            # עמודה 4: השינוי באחוזים עם צביעה
+            change_item = QTableWidgetItem(f"{change_percent:+.2f}%")
+            change_item.setForeground(color)
+            self.dashboard_view.stock_table.setItem(row, 4, change_item)
 
     def handle_add_stock(self):
         """פתיחת דיאלוג חיפוש מניות והוספה"""

@@ -5,6 +5,7 @@ from client.modules.auth.controller.auth_controller import AuthController
 from client.modules.explorer.controller.explorer_controller import ExplorerController
 from client.modules.portfolio.controller.portfolio_controller import PortfolioController
 from client.modules.advisor.controller.advisor_controller import AdvisorController
+from client.core.api_client import APIClient
 
 GLOBAL_STYLE = """
     QWidget {
@@ -71,7 +72,8 @@ class AppController(QMainWindow):
         self.setWindowTitle("StockQuotes Enterprise System")
         self.setFixedSize(1200, 800)
         
-        self.current_user = None 
+        self.current_user = None
+        self.api = APIClient()  # יצירת instance של APIClient
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)

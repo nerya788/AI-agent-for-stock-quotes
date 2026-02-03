@@ -23,10 +23,43 @@ class TradeController(QDialog):
 
     def open_purchase_window(self, symbol, price):
         self.view.set_stock_data(symbol, price)
+        
+        # טען כרטיסים שמורים עבור המשתמש הנוכחי
+        if self.app and hasattr(self.app, 'current_user') and self.app.current_user:
+            try:
+                user_id = self.app.current_user.id
+                print(f"🔍 Loading saved cards for user: {user_id}")
+                
+                cards_response = self.app.api.get_saved_cards(user_id)
+                print(f"📥 Cards Response: {cards_response}")
+                
+                if cards_response.get("status") == "success":
+                    cards = cards_response.get("cards", [])
+                    print(f"✅ Loaded {len(cards)} saved cards")
+                    self.view.load_saved_cards(cards)
+                else:
+                    print(f"⚠️ No cards found or error: {cards_response}")
+                    self.view.load_saved_cards([])
+            except Exception as e:
+                print(f"❌ Exception loading saved cards: {e}")
+                import traceback
+                traceback.print_exc()
+                self.view.load_saved_cards([])
+        else:
+            print("⚠️ No current user or app_controller not available")
+            self.view.load_saved_cards([])
+        
         self.exec()
 
     def execute_purchase(self, data):
         print(f"🚀 Starting purchase process for {data['symbol']}...")
+
+        # הוסף user_id מ-app_controller
+        if self.app and hasattr(self.app, 'current_user') and self.app.current_user:
+            data['user_id'] = self.app.current_user.id
+        else:
+            QMessageBox.warning(self, "Authentication Error", "User not logged in.")
+            return
 
         # ולידציה בסיסית לפני שליחה
         if len(data['card_number']) != 16:

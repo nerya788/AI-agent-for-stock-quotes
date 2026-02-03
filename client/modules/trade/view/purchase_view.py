@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QLineEdit, QPushButton, QCheckBox, QSpinBox)
+                             QLineEdit, QPushButton, QCheckBox, QSpinBox, QComboBox)
 from PySide6.QtCore import Qt, Signal, QRegularExpression
 from PySide6.QtGui import QRegularExpressionValidator
 
@@ -26,6 +26,13 @@ class PurchaseView(QWidget):
                 background-color: #313244; border: 1px solid #fab387; border-radius: 6px;
                 padding: 5px; color: white; font-size: 16px; font-weight: bold; min-height: 35px;
             }
+            QComboBox {
+                background-color: #313244; border: 1px solid #45475a; 
+                padding: 5px 10px; border-radius: 6px; color: white; font-size: 14px; min-height: 35px;
+            }
+            QComboBox:focus { border: 1px solid #89b4fa; background-color: #45475a; }
+            QComboBox::drop-down { border: none; }
+            QComboBox::down-arrow { width: 12px; height: 12px; }
             QPushButton { 
                 padding: 10px; border-radius: 6px; font-weight: bold; font-size: 14px; min-height: 40px; 
             }
@@ -76,6 +83,13 @@ class PurchaseView(QWidget):
         layout.addLayout(total_row)
 
         layout.addWidget(QLabel("Payment Details 💳"))
+
+        # דרופדאון כרטיסים שמורים
+        self.saved_cards_combo = QComboBox()
+        self.saved_cards_combo.addItem("Enter New Card")
+        self.saved_cards_combo.currentIndexChanged.connect(self.on_card_selected)
+        layout.addWidget(QLabel("Saved Cards:"))
+        layout.addWidget(self.saved_cards_combo)
 
         # שם בעל כרטיס
         self.card_holder = QLineEdit()
@@ -129,6 +143,7 @@ class PurchaseView(QWidget):
 
         self.setLayout(layout)
         self.current_unit_price = 0.0
+        self.saved_cards = []  # רשימה של כרטיסים שמורים
 
     def set_stock_data(self, symbol, price):
         self.symbol_label.setText(symbol)
@@ -150,6 +165,45 @@ class PurchaseView(QWidget):
             "card_number": self.card_number.text(),
             "expiration": self.expiration.text(),
             "cvv": self.cvv.text(),
-            "save_card": self.save_card_chk.isChecked()
+            "save_card": self.save_card_chk.isChecked(),
+            "user_id": None  # Will be set by trade_controller
         }
         self.on_buy_clicked.emit(data)
+
+    def load_saved_cards(self, cards):
+        """טען כרטיסים שמורים מה-API"""
+        self.saved_cards = cards
+        self.saved_cards_combo.blockSignals(True)
+        self.saved_cards_combo.clear()
+        self.saved_cards_combo.addItem("Enter New Card")
+        
+        for card in cards:
+            # הצג את 4 הספרות האחרונות של הכרטיס
+            card_display = f"****{card['card_number'][-4:]} ({card.get('card_holder', 'Unknown')})"
+            self.saved_cards_combo.addItem(card_display, card)
+        
+        self.saved_cards_combo.blockSignals(False)
+        print(f"✅ Loaded {len(cards)} saved cards")
+
+    def on_card_selected(self, index):
+        """כאשר בוחרים כרטיס משמור"""
+        print(f"🎯 Card selected at index: {index}")
+        
+        if index == 0:
+            # "Enter New Card" selected - clear fields
+            print("  → Clearing fields for new card entry")
+            self.card_holder.clear()
+            self.card_number.clear()
+            self.expiration.clear()
+            self.cvv.clear()
+        else:
+            # בחרו כרטיס משמור - מלא את השדות
+            card = self.saved_cards_combo.currentData()
+            print(f"  → Selected card data: {card}")
+            
+            if card:
+                self.card_holder.setText(card.get("card_holder", ""))
+                self.card_number.setText(card.get("card_number", ""))
+                self.expiration.setText(card.get("expiration", ""))
+                self.cvv.setText(card.get("cvv", ""))
+                print(f"  ✅ Filled fields for: {card.get('card_holder')}")

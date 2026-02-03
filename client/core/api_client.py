@@ -85,3 +85,15 @@ class APIClient:
             return {"recommendation": f"Error: {response.text}"}
         except Exception as e:
             return {"recommendation": f"Connection error: {e}"}
+
+    # --- Trade (Buying & Saved Cards) ---
+    def get_saved_cards(self, user_id):
+        """קבלת כרטיסים שמורים של משתמש"""
+        try:
+            response = requests.get(f"{self.base_url}/trade/saved-cards/{user_id}")
+            if response.status_code == 200:
+                return response.json()
+            return {"status": "error", "cards": []}
+        except Exception as e:
+            print(f"API Error (Saved Cards): {e}")
+            return {"status": "error", "cards": []}
