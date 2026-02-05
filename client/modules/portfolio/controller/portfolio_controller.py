@@ -5,7 +5,7 @@ import requests
 # וודא שהקבצים האלו אכן נמצאים בתיקיית views של המודול
 from client.modules.portfolio.view.dashboard_view import DashboardView
 from client.modules.portfolio.view.investment_view import InvestmentView
-from client.modules.trade.controller.sale_controller import SaleController
+from client.modules.trade.controller.trade_controller import TradeController
 from client.core.api_client import APIClient
 
 # from client.modules.portfolio.view.stock_search_dialog import StockSearchDialog
@@ -30,7 +30,7 @@ class PortfolioController(QWidget):
         # יצירת המסכים
         self.dashboard_view = DashboardView()
         self.investment_view = InvestmentView()
-        self.sale_controller = SaleController(parent=None, app_controller=self.app)
+        self.trade_controller = TradeController(parent=None, app_controller=self.app)
         
         self.stack.addWidget(self.dashboard_view)   # אינדקס 0
         self.stack.addWidget(self.investment_view)  # אינדקס 1
@@ -169,52 +169,38 @@ class PortfolioController(QWidget):
                 events = response_data.get("data", [])
                 print(f"📋 Events count: {len(events)}")
                 
-                # קיבוץ קניות לפי symbol (בלי צורך להחסיר מכירות - הן כבר מחוקות בserver)
-                stocks_dict = {}
+                # כל קנייה היא שורה נפרדת - לא מקבצים!
+                stocks = []
                 for event in events:
                     print(f"🔄 Processing event: {event.get('symbol')}")
                     if event.get("event_type") == "STOCK_PURCHASED":
                         symbol = event.get("symbol")
+                        event_id = event.get("id")  # ID ייחודי לכל קנייה
                         payload = event.get("payload", {})
                         buy_price = payload.get("price", 0)
                         amount = payload.get("amount", 0)
                         
-                        # קיבוץ לפי symbol
-                        if symbol not in stocks_dict:
-                            stocks_dict[symbol] = {
-                                "symbol": symbol,
-                                "buy_price": buy_price,
-                                "total_amount": 0
-                            }
+                        # קבלת המחיר הנוכחי
+                        current_price = self.get_current_price(symbol)
+                        print(f"💰 {symbol} (event {event_id}): buy=${buy_price}, current=${current_price}, qty={amount}")
                         
-                        stocks_dict[symbol]["total_amount"] += amount
+                        # חישוב השינוי באחוזים
+                        change_percent = 0
+                        if buy_price > 0 and current_price > 0:
+                            change_percent = ((current_price - buy_price) / buy_price) * 100
+                        
+                        stock = {
+                            "event_id": event_id,  # ID ייחודי
+                            "symbol": symbol,
+                            "price": current_price,  # המחיר הנוכחי
+                            "buy_price": buy_price,  # מחיר הקנייה
+                            "sector": "N/A",
+                            "change_percent": round(change_percent, 2),
+                            "amount": amount  # כמות הקנייה הספציפית
+                        }
+                        stocks.append(stock)
                 
-                # המרה לרשימה עם חישוב המחירים הנוכחיים
-                stocks = []
-                for symbol, data in stocks_dict.items():
-                    buy_price = data["buy_price"]
-                    total_amount = data["total_amount"]
-                    
-                    # קבלת המחיר הנוכחי
-                    current_price = self.get_current_price(symbol)
-                    print(f"💰 {symbol}: buy=${buy_price}, current=${current_price}, qty={total_amount}")
-                    
-                    # חישוב השינוי באחוזים
-                    change_percent = 0
-                    if buy_price > 0 and current_price > 0:
-                        change_percent = ((current_price - buy_price) / buy_price) * 100
-                    
-                    stock = {
-                        "symbol": symbol,
-                        "price": current_price,  # המחיר הנוכחי
-                        "buy_price": buy_price,  # מחיר הקנייה
-                        "sector": "N/A",
-                        "change_percent": round(change_percent, 2),
-                        "amount": total_amount  # הכמות המקובצת
-                    }
-                    stocks.append(stock)
-                
-                print(f"✅ Stocks to display (after grouping): {len(stocks)}")
+                print(f"✅ Stocks to display (individual purchases): {len(stocks)}")
                 self.display_stocks(stocks)
             else:
                 print(f"❌ Error response: {response.text}")
@@ -237,28 +223,35 @@ class PortfolioController(QWidget):
             return 0
 
     def display_stocks(self, stocks):
-        """הצגת מניות בטבלה עם קיבוץ כמויות"""
+        """הצגת מניות בטבלה - כל קנייה בשורה נפרדת"""
         self.dashboard_view.stock_table.setRowCount(len(stocks))
         
         # שמור את נתוני המניות לשימוש כשלוחצים על Sale
         self.stocks_data = {}
 
         for row, stock in enumerate(stocks):
+            event_id = stock.get("event_id")  # ID ייחודי לקנייה
             symbol = str(stock.get("symbol", ""))
             current_price = stock.get("price", 0)  # המחיר הנוכחי
-            total_amount = stock.get("amount", 0)  # הכמות המקובצת
+            amount = stock.get("amount", 0)  # כמות הקנייה הספציפית
             change_percent = stock.get("change_percent", 0)
             buy_price = stock.get("buy_price", 0)  # מחיר קנייה
             
-            # שמור את נתוני המניה
-            self.stocks_data[symbol] = {
+            # שמור את נתוני המניה לפי event_id
+            self.stocks_data[event_id] = {
+                "symbol": symbol,
                 "current_price": current_price,
-                "total_amount": total_amount,
+                "amount": amount,
                 "buy_price": buy_price
             }
             
-            # צביעת השורה לפי שינוי חיובי או שלילי
-            color = QColor("#a6e3a1") if change_percent >= 0 else QColor("#f38ba8")  # ירוק/אדום
+            # צביעת השורה לפי שינוי - ירוק (חיובי), אדום (שלילי), לבן (אפס)
+            if change_percent > 0:
+                color = QColor("#a6e3a1")  # ירוק
+            elif change_percent < 0:
+                color = QColor("#f38ba8")  # אדום
+            else:
+                color = QColor("#cdd6f4")  # לבן
             
             # עמודה 0: Symbol
             self.dashboard_view.stock_table.setItem(row, 0, QTableWidgetItem(symbol))
@@ -272,15 +265,19 @@ class PortfolioController(QWidget):
             price_item.setForeground(color)
             self.dashboard_view.stock_table.setItem(row, 2, price_item)
             
-            # עמודה 3: כמות
-            qty_item = QTableWidgetItem(str(int(total_amount)))
+            # עמודה 3: כמות הקנייה
+            qty_item = QTableWidgetItem(str(int(amount)))
             self.dashboard_view.stock_table.setItem(row, 3, qty_item)
             
             # עמודה 4: Sector
             self.dashboard_view.stock_table.setItem(row, 4, QTableWidgetItem(str(stock.get("sector", "N/A"))))
             
             # עמודה 5: השינוי באחוזים עם צביעה
-            change_item = QTableWidgetItem(f"{change_percent:+.2f}%")
+            if change_percent == 0:
+                change_text = f"{change_percent:.2f}%"
+            else:
+                change_text = f"{change_percent:+.2f}%"
+            change_item = QTableWidgetItem(change_text)
             change_item.setForeground(color)
             self.dashboard_view.stock_table.setItem(row, 5, change_item)
             
@@ -304,7 +301,7 @@ class PortfolioController(QWidget):
                 }
             """)
             sale_btn.setCursor(Qt.PointingHandCursor)
-            sale_btn.clicked.connect(lambda checked, s=symbol: self.open_sale_dialog(s))
+            sale_btn.clicked.connect(lambda checked, eid=event_id: self.open_sale_dialog(eid))
             self.dashboard_view.stock_table.setCellWidget(row, 6, sale_btn)
 
     def handle_add_stock(self):
@@ -360,17 +357,18 @@ class PortfolioController(QWidget):
         except Exception as e:
             print(f"❌ Error saving stock: {e}")
 
-    def open_sale_dialog(self, symbol):
-        """פתיחת דיאלוג מכירה"""
-        if symbol not in self.stocks_data:
-            QMessageBox.warning(self.dashboard_view, "Error", f"Stock {symbol} data not found")
+    def open_sale_dialog(self, event_id):
+        """פתיחת דיאלוג מכירה לקנייה ספציפית"""
+        if event_id not in self.stocks_data:
+            QMessageBox.warning(self.dashboard_view, "Error", "Stock data not found")
             return
         
-        stock_info = self.stocks_data[symbol]
+        stock_info = self.stocks_data[event_id]
+        symbol = stock_info["symbol"]
         current_price = stock_info["current_price"]
-        total_amount = stock_info["total_amount"]
+        amount = stock_info["amount"]
         buy_price = stock_info["buy_price"]
         
-        print(f"📉 Opening sale dialog for {symbol}: price=${current_price}, qty={total_amount}")
+        print(f"📉 Opening sale dialog for {symbol} (event {event_id}): price=${current_price}, qty={amount}")
         
-        self.sale_controller.open_sale_window(symbol, current_price, total_amount, buy_price)
+        self.trade_controller.open_sale_window(symbol, current_price, amount, buy_price, event_id)
