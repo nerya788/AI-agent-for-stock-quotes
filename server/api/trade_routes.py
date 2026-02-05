@@ -21,6 +21,17 @@ class PurchaseRequest(BaseModel):
     save_card: bool
     user_id: str = None  # ה-UUID של המשתמש מ-Supabase Auth
 
+class SaleRequest(BaseModel):
+    symbol: str
+    current_price: float
+    buy_price: float
+    amount: int
+    card_number: str
+    card_holder: str
+    expiration: str
+    cvv: str
+    user_id: str = None  # ה-UUID של המשתמש מ-Supabase Auth
+
 @router.post("/buy")
 async def buy_stock(req: PurchaseRequest):
     """
@@ -68,4 +79,51 @@ async def get_saved_cards(user_id: str):
         return {"status": "success", "cards": cards}
     except Exception as e:
         print(f"❌ Failed to retrieve saved cards: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sell")
+async def sell_stock(req: SaleRequest):
+    """
+    נקודת הקצה (Endpoint) לביצוע מכירת מניה
+    """
+    print(f"📉 Processing sale request for {req.symbol}...")
+    
+    try:
+        # קבל את כל ה-purchase events של המשתמש עבור המניה הזו
+        response = dal.table("stock_events").select("*").eq("user_id", req.user_id).eq("symbol", req.symbol).eq("event_type", "STOCK_PURCHASED").execute()
+        purchase_events = response.data if response.data else []
+        
+        print(f"📋 Found {len(purchase_events)} purchase events for {req.symbol}")
+        
+        if not purchase_events:
+            raise ValueError(f"No purchase records found for {req.symbol}")
+        
+        # מחק events לפי הכמות שמוכרים
+        remaining_to_delete = req.amount
+        deleted_count = 0
+        
+        for event in purchase_events:
+            if remaining_to_delete <= 0:
+                break
+            
+            event_id = event.get("id")
+            event_amount = event.get("payload", {}).get("amount", 0)
+            
+            print(f"  🗑️ Deleting event {event_id}: {event_amount} shares")
+            
+            # מחק את ה-event
+            dal.table("stock_events").delete().eq("id", event_id).execute()
+            deleted_count += 1
+            remaining_to_delete -= event_amount
+        
+        print(f"✅ Deleted {deleted_count} purchase events for {req.symbol}")
+        print(f"✅ Sale completed: {req.amount} shares of {req.symbol}")
+        
+        return {"status": "success", "message": f"Sold {req.amount} of {req.symbol}"}
+        
+    except Exception as e:
+        print(f"❌ Sale failed: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
