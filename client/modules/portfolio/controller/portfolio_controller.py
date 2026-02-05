@@ -1,9 +1,11 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QMessageBox, QTableWidgetItem
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QMessageBox, QTableWidgetItem, QPushButton
 from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt
 import requests
 # וודא שהקבצים האלו אכן נמצאים בתיקיית views של המודול
 from client.modules.portfolio.view.dashboard_view import DashboardView
 from client.modules.portfolio.view.investment_view import InvestmentView
+from client.modules.trade.controller.sale_controller import SaleController
 from client.core.api_client import APIClient
 
 # from client.modules.portfolio.view.stock_search_dialog import StockSearchDialog
@@ -14,6 +16,7 @@ class PortfolioController(QWidget):
         super().__init__()
         self.app = app_controller
         self.api = APIClient()
+        self.stocks_data = {}  # שמירת נתוני המניות
         
         # פריסה ראשית
         layout = QVBoxLayout()
@@ -27,6 +30,7 @@ class PortfolioController(QWidget):
         # יצירת המסכים
         self.dashboard_view = DashboardView()
         self.investment_view = InvestmentView()
+        self.sale_controller = SaleController(parent=None, app_controller=self.app)
         
         self.stack.addWidget(self.dashboard_view)   # אינדקס 0
         self.stack.addWidget(self.investment_view)  # אינדקס 1
@@ -165,7 +169,7 @@ class PortfolioController(QWidget):
                 events = response_data.get("data", [])
                 print(f"📋 Events count: {len(events)}")
                 
-                # קיבוץ קניות לפי symbol
+                # קיבוץ קניות לפי symbol (בלי צורך להחסיר מכירות - הן כבר מחוקות בserver)
                 stocks_dict = {}
                 for event in events:
                     print(f"🔄 Processing event: {event.get('symbol')}")
@@ -235,12 +239,23 @@ class PortfolioController(QWidget):
     def display_stocks(self, stocks):
         """הצגת מניות בטבלה עם קיבוץ כמויות"""
         self.dashboard_view.stock_table.setRowCount(len(stocks))
+        
+        # שמור את נתוני המניות לשימוש כשלוחצים על Sale
+        self.stocks_data = {}
 
         for row, stock in enumerate(stocks):
             symbol = str(stock.get("symbol", ""))
             current_price = stock.get("price", 0)  # המחיר הנוכחי
             total_amount = stock.get("amount", 0)  # הכמות המקובצת
             change_percent = stock.get("change_percent", 0)
+            buy_price = stock.get("buy_price", 0)  # מחיר קנייה
+            
+            # שמור את נתוני המניה
+            self.stocks_data[symbol] = {
+                "current_price": current_price,
+                "total_amount": total_amount,
+                "buy_price": buy_price
+            }
             
             # צביעת השורה לפי שינוי חיובי או שלילי
             color = QColor("#a6e3a1") if change_percent >= 0 else QColor("#f38ba8")  # ירוק/אדום
@@ -248,22 +263,49 @@ class PortfolioController(QWidget):
             # עמודה 0: Symbol
             self.dashboard_view.stock_table.setItem(row, 0, QTableWidgetItem(symbol))
             
-            # עמודה 1: המחיר הנוכחי
+            # עמודה 1: מחיר קנייה
+            buy_price_item = QTableWidgetItem(f"${buy_price:.2f}")
+            self.dashboard_view.stock_table.setItem(row, 1, buy_price_item)
+            
+            # עמודה 2: המחיר הנוכחי
             price_item = QTableWidgetItem(f"${current_price:.2f}")
             price_item.setForeground(color)
-            self.dashboard_view.stock_table.setItem(row, 1, price_item)
+            self.dashboard_view.stock_table.setItem(row, 2, price_item)
             
-            # עמודה 2: כמות
+            # עמודה 3: כמות
             qty_item = QTableWidgetItem(str(int(total_amount)))
-            self.dashboard_view.stock_table.setItem(row, 2, qty_item)
+            self.dashboard_view.stock_table.setItem(row, 3, qty_item)
             
-            # עמודה 3: Sector
-            self.dashboard_view.stock_table.setItem(row, 3, QTableWidgetItem(str(stock.get("sector", "N/A"))))
+            # עמודה 4: Sector
+            self.dashboard_view.stock_table.setItem(row, 4, QTableWidgetItem(str(stock.get("sector", "N/A"))))
             
-            # עמודה 4: השינוי באחוזים עם צביעה
+            # עמודה 5: השינוי באחוזים עם צביעה
             change_item = QTableWidgetItem(f"{change_percent:+.2f}%")
             change_item.setForeground(color)
-            self.dashboard_view.stock_table.setItem(row, 4, change_item)
+            self.dashboard_view.stock_table.setItem(row, 5, change_item)
+            
+            # עמודה 6: כפתור Sale
+            sale_btn = QPushButton("📉 Sell")
+            sale_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f38ba8;
+                    color: #1e1e2e;
+                    font-weight: bold;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    border: none;
+                    font-size: 13px;
+                }
+                QPushButton:hover {
+                    background-color: #f5b9d6;
+                }
+                QPushButton:pressed {
+                    background-color: #e8738d;
+                }
+            """)
+            sale_btn.setCursor(Qt.PointingHandCursor)
+            sale_btn.clicked.connect(lambda checked, s=symbol: self.open_sale_dialog(s))
+            self.dashboard_view.stock_table.setCellWidget(row, 6, sale_btn)
 
     def handle_add_stock(self):
         """פתיחת דיאלוג חיפוש מניות והוספה"""
@@ -317,3 +359,18 @@ class PortfolioController(QWidget):
             self.load_watchlist()
         except Exception as e:
             print(f"❌ Error saving stock: {e}")
+
+    def open_sale_dialog(self, symbol):
+        """פתיחת דיאלוג מכירה"""
+        if symbol not in self.stocks_data:
+            QMessageBox.warning(self.dashboard_view, "Error", f"Stock {symbol} data not found")
+            return
+        
+        stock_info = self.stocks_data[symbol]
+        current_price = stock_info["current_price"]
+        total_amount = stock_info["total_amount"]
+        buy_price = stock_info["buy_price"]
+        
+        print(f"📉 Opening sale dialog for {symbol}: price=${current_price}, qty={total_amount}")
+        
+        self.sale_controller.open_sale_window(symbol, current_price, total_amount, buy_price)
