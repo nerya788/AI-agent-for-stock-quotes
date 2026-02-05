@@ -26,6 +26,7 @@ class SaleRequest(BaseModel):
     current_price: float
     buy_price: float
     amount: int
+    event_id: int  # ID של אירוע הקנייה למחיקה
     card_number: str
     card_holder: str
     expiration: str
@@ -85,39 +86,39 @@ async def get_saved_cards(user_id: str):
 @router.post("/sell")
 async def sell_stock(req: SaleRequest):
     """
-    נקודת הקצה (Endpoint) לביצוע מכירת מניה
+    מכירת מניה - מחיקת אירוע קנייה ספציפי לפי event_id
+    אם מוכרים חלק מהכמות, נעדכן את ה-payload. אם מוכרים הכל, נמחק את האירוע.
     """
-    print(f"📉 Processing sale request for {req.symbol}...")
+    print(f"📉 Processing sale request for {req.symbol} (event {req.event_id})...")
     
     try:
-        # קבל את כל ה-purchase events של המשתמש עבור המניה הזו
-        response = dal.table("stock_events").select("*").eq("user_id", req.user_id).eq("symbol", req.symbol).eq("event_type", "STOCK_PURCHASED").execute()
-        purchase_events = response.data if response.data else []
+        # קבל את ה-purchase event לפי event_id
+        response = dal.table("stock_events").select("*").eq("id", req.event_id).eq("event_type", "STOCK_PURCHASED").execute()
         
-        print(f"📋 Found {len(purchase_events)} purchase events for {req.symbol}")
+        if not response.data or len(response.data) == 0:
+            raise ValueError(f"No purchase event found with ID {req.event_id}")
         
-        if not purchase_events:
-            raise ValueError(f"No purchase records found for {req.symbol}")
+        event = response.data[0]
+        event_amount = event.get("payload", {}).get("amount", 0)
         
-        # מחק events לפי הכמות שמוכרים
-        remaining_to_delete = req.amount
-        deleted_count = 0
+        print(f"📋 Found event {req.event_id}: {event_amount} shares of {req.symbol}")
         
-        for event in purchase_events:
-            if remaining_to_delete <= 0:
-                break
+        # בדוק אם מוכרים את כל הכמות או חלק
+        if req.amount >= event_amount:
+            # מוכרים הכל - מחק את האירוע
+            print(f"  🗑️ Deleting entire event {req.event_id}")
+            dal.table("stock_events").delete().eq("id", req.event_id).execute()
+            print(f"✅ Deleted event {req.event_id}")
+        else:
+            # מוכרים חלק - עדכן את הכמות
+            remaining_amount = event_amount - req.amount
+            updated_payload = event.get("payload", {})
+            updated_payload["amount"] = remaining_amount
             
-            event_id = event.get("id")
-            event_amount = event.get("payload", {}).get("amount", 0)
-            
-            print(f"  🗑️ Deleting event {event_id}: {event_amount} shares")
-            
-            # מחק את ה-event
-            dal.table("stock_events").delete().eq("id", event_id).execute()
-            deleted_count += 1
-            remaining_to_delete -= event_amount
+            print(f"  ✏️ Updating event {req.event_id}: {event_amount} -> {remaining_amount} shares")
+            dal.table("stock_events").update({"payload": updated_payload}).eq("id", req.event_id).execute()
+            print(f"✅ Updated event {req.event_id}")
         
-        print(f"✅ Deleted {deleted_count} purchase events for {req.symbol}")
         print(f"✅ Sale completed: {req.amount} shares of {req.symbol}")
         
         return {"status": "success", "message": f"Sold {req.amount} of {req.symbol}"}
