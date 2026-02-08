@@ -42,3 +42,18 @@ class StockService:
         except Exception as e:
             print(f"❌ Error fetching history: {e}")
             return None
+    
+    def get_company_info(self, symbol: str):
+        """שליפת מידע כללי על החברה (כולל סקטור)"""
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            return {
+                "symbol": symbol,
+                "sector": info.get("sector", "Unknown"),
+                "industry": info.get("industry", "Unknown"),
+                "longBusinessSummary": info.get("longBusinessSummary", "")
+            }
+        except Exception as e:
+            print(f"Error fetching info for {symbol}: {e}")
+            return {"sector": "Unknown"}

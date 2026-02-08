@@ -2,103 +2,100 @@ from server.dal.supabase_client import SupabaseDAL
 
 class StockRepository:
     def __init__(self):
-        # שימוש ב-DAL הקיים (במקום ליצור חיבור חדש)
+        # אך ורק self.dal!
         self.dal = SupabaseDAL.get_instance()
 
-    def _append_event(self, symbol: str, event_type: str, payload: dict):
+    def _append_event(self, symbol: str, event_type: str, payload: dict, user_id: str = None):
         """
-        תיעוד אירוע בטבלת ההיסטוריה (Event Store).
+        תיעוד אירוע בטבלת ההיסטוריה.
         """
         event_data = {
             "symbol": symbol,
             "event_type": event_type,
-            "payload": payload
+            "payload": payload,
+            "user_id": user_id 
         }
         try:
             self.dal.table("stock_events").insert(event_data).execute()
-            print(f"📝 Event Logged: {event_type} for {symbol}")
+            print(f"📝 Event Logged: {event_type} for {symbol} (User: {user_id})")
         except Exception as e:
-            print(f"❌ Failed to log event: {e}")
+            print(f"❌ Failed to log event inside _append_event: {e}")
 
     def get_watchlist(self):
-        """
-        שליפת כל המניות לדשבורד (היה חסר בקוד שלך!)
-        """
         return self.dal.table("stocks_watchlist").select("*").execute()
 
-    def add_to_watchlist(self, symbol: str, price: float):
-        """
-        הוספת מניה למעקב (כולל תיעוד אירוע)
-        """
-        # 1. תיעוד
+    def add_to_watchlist(self, symbol: str, price: float, user_id: str = None):
         self._append_event(symbol, "STOCK_ADDED", {
             "price": price, 
+            "amount": 0,
+            "total": 0,
             "source": "manual_add"
-        })
+        }, user_id)
 
-        # 2. שמירה בטבלה
-        view_data = {"symbol": symbol, "price": price, "amount": 0} # ברירת מחדל 0 כמות
-        # משתמשים ב-upsert כדי לא לדרוס כמות קיימת אם יש
-        # במקרה הזה נזהר לא לאפס כמות אם המשתמש רק רצה לעדכן מחיר
-        # אבל לפשטות כרגע זה בסדר (או שאפשר לבדוק קודם)
+        view_data = {"symbol": symbol, "price": price, "amount": 0, "user_id": user_id}
         return self.dal.table("stocks_watchlist").upsert(view_data).execute()
 
-    def remove_from_watchlist(self, symbol: str):
-        """
-        מחיקת מניה (כולל תיעוד אירוע - בונוס לציון)
-        """
-        # 1. תיעוד
-        self._append_event(symbol, "STOCK_REMOVED", {})
-
-        # 2. מחיקה בפועל
-        return self.dal.table("stocks_watchlist").delete().eq("symbol", symbol).execute()
+    def remove_from_watchlist(self, symbol: str, user_id: str = None):
+        self._append_event(symbol, "STOCK_REMOVED", {
+            "amount": 0, "price": 0, "total": 0
+        }, user_id)
+        return self.dal.table("stocks_watchlist").delete().eq("symbol", symbol).eq("user_id", user_id).execute()
 
     def get_events_history(self, symbol: str):
-        """
-        שליפת היסטוריית האירועים למניה
-        """
         return self.dal.table("stock_events")\
             .select("*")\
             .eq("symbol", symbol)\
             .order("created_at", desc=True)\
             .execute()
 
-    def buy_stock(self, symbol: str, price: float, amount_to_buy: int, card_details: dict = None):
+    def buy_stock(self, symbol: str, price: float, amount_to_buy: int, card_details: dict = None, sector: str = "Unknown", user_id: str = None):
         """
-        ביצוע קנייה: תיעוד + עדכון כמות
+        ביצוע קנייה חכמה: חישוב ממוצע משוקלל + תיעוד
         """
+        print(f"🔄 Starting SMART buy_stock for {symbol}...")
+
         # 1. תיעוד האירוע
         self._append_event(symbol, "STOCK_PURCHASED", {
-            "amount_added": amount_to_buy,
-            "price_at_purchase": price,
+            "amount": amount_to_buy,
+            "price": price,
+            "total": price * amount_to_buy,
             "payment_info": card_details.get("card_number")[-4:] if card_details else "N/A"
-        })
+        }, user_id=user_id)
 
-        # 2. עדכון המצב (Aggregation)
+        # 2. חישוב הממוצע המשוקלל
         try:
-            # שליפת כמות נוכחית
             existing_row = self.dal.table("stocks_watchlist")\
-                .select("amount")\
+                .select("*")\
                 .eq("symbol", symbol)\
+                .eq("user_id", user_id)\
                 .execute()
             
             new_total_amount = amount_to_buy
+            new_avg_price = price
             
             if existing_row.data and len(existing_row.data) > 0:
-                current_amount = existing_row.data[0].get('amount', 0)
-                new_total_amount += current_amount
-                print(f"🔄 Updating {symbol}: {current_amount} + {amount_to_buy} = {new_total_amount}")
-            else:
-                print(f"✨ Creating new entry for {symbol}")
+                current_data = existing_row.data[0]
+                current_amount = current_data.get('amount', 0)
+                current_avg_price = current_data.get('price', 0)
 
-            # שמירה
+                # חישוב משוקלל
+                if current_amount + amount_to_buy > 0:
+                    total_cost = (current_amount * current_avg_price) + (amount_to_buy * price)
+                    new_total_amount = current_amount + amount_to_buy
+                    new_avg_price = total_cost / new_total_amount
+            
+            # 3. שמירה
             view_data = {
+                "user_id": user_id,
                 "symbol": symbol,
-                "price": price,
-                "amount": new_total_amount
+                "price": new_avg_price, 
+                "amount": new_total_amount,
+                "sector": sector
             }
-            return self.dal.table("stocks_watchlist").upsert(view_data).execute()
+            
+            print(f"💾 Saving SMART data: {view_data}")
+            return self.dal.table("stocks_watchlist").upsert(view_data, on_conflict="user_id, symbol").execute()
 
         except Exception as e:
-            print(f"❌ Error updating watchlist: {e}")
+            print(f"❌ Error in buy_stock: {e}")
             raise e
