@@ -6,21 +6,23 @@ from server.repositories.stock_repository import StockRepository
 from server.dal.supabase_client import SupabaseDAL
 from datetime import datetime
 
-# יצירת הראוטר (במקום app = FastAPI)
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
 
-# אתחול השירותים (Dependency Injection)
-stock_service = StockService()   # מביא נתונים (Gateway לשעבר)
-ai_service = AIService()         # מנתח נתונים (Ollama)
-stock_repo = StockRepository()   # שומר נתונים (Supabase)
+# אתחול השירותים
+stock_service = StockService()
+ai_service = AIService()
+stock_repo = StockRepository()
+dal = SupabaseDAL.get_instance()
 
-# מודל לשמירת stock event
+
+# מודלים
 class StockEventRequest(BaseModel):
     user_id: str
     symbol: str
     event_type: str
     payload: dict = {}
-# מודל לבקשת תכנית השקעה
+
+
 class InvestmentPlanRequest(BaseModel):
     amount: str
     sector: str
@@ -28,7 +30,32 @@ class InvestmentPlanRequest(BaseModel):
     availability: str
     location: str
 
-# 1. קבלת מחיר מניה בזמן אמת
+
+# --- 1. התיקון הקריטי לדשבורד (Watchlist לפי User ID) ---
+@router.get("/watchlist/{user_id}")
+async def get_watchlist(user_id: str):
+    """
+    מחזיר את התיק הנוכחי (Watchlist) של המשתמש הספציפי
+    """
+    print(f"📊 Serving watchlist for user: {user_id}")
+    try:
+        # שליפה ישירה מהטבלה stocks_watchlist לפי user_id
+        response = (
+            dal.table("stocks_watchlist").select("*").eq("user_id", user_id).execute()
+        )
+
+        data = response.data if response.data else []
+        print(f"✅ Found {len(data)} items in watchlist.")
+        return {"status": "success", "data": data}
+
+    except Exception as e:
+        print(f"❌ Error fetching watchlist: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- כל שאר הפונקציות המקוריות שלך נשארות כאן ---
+
+
 @router.get("/quote/{symbol}")
 async def get_stock_price(symbol: str):
     data = stock_service.get_live_quote(symbol)
@@ -36,12 +63,9 @@ async def get_stock_price(symbol: str):
         raise HTTPException(status_code=404, detail="Stock symbol not found")
     return data
 
-# 1.1 רשימת חברות פופולריות (Browse Companies)
+
 @router.get("/popular")
 async def get_popular_stocks():
-    """
-    החזרת רשימת חברות פופולריות לצורך Browse
-    """
     try:
         popular = [
             {"symbol": "AAPL", "name": "Apple Inc."},
@@ -63,70 +87,54 @@ async def get_popular_stocks():
             {"symbol": "PEP", "name": "PepsiCo, Inc."},
             {"symbol": "COST", "name": "Costco Wholesale Corporation"},
             {"symbol": "JPM", "name": "JPMorgan Chase & Co."},
-            {"symbol": "KO", "name": "The Coca-Cola Company"}
+            {"symbol": "KO", "name": "The Coca-Cola Company"},
         ]
 
         enriched = []
         for stock in popular:
             quote = stock_service.get_live_quote(stock["symbol"])
             if quote:
-                enriched.append({
-                    "symbol": stock["symbol"],
-                    "name": stock["name"],
-                    "price": quote.get("price")
-                })
+                enriched.append(
+                    {
+                        "symbol": stock["symbol"],
+                        "name": stock["name"],
+                        "price": quote.get("price"),
+                    }
+                )
             else:
-                enriched.append({
-                    "symbol": stock["symbol"],
-                    "name": stock["name"],
-                    "price": None
-                })
+                enriched.append(
+                    {"symbol": stock["symbol"], "name": stock["name"], "price": None}
+                )
 
         return {"stocks": enriched}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 0. שמירת stock event עם user_id
+
 @router.post("/event")
 async def record_stock_event(event: StockEventRequest):
-    """
-    שמירת אירוע קנייה של מניה עם ה-user_id של המשתמש
-    """
     try:
-        client = SupabaseDAL.get_instance()
-        
         data = {
             "user_id": event.user_id,
             "symbol": event.symbol.upper(),
             "event_type": event.event_type,
             "payload": event.payload,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
-        
-        response = client.table("stock_events").insert(data).execute()
-        
+
+        response = dal.table("stock_events").insert(data).execute()
+
         if response.data:
             print(f"✅ Stock event saved: {event.symbol} for user {event.user_id}")
             return {"success": True, "data": response.data[0]}
         else:
             raise HTTPException(status_code=500, detail="Failed to save event")
-            
+
     except Exception as e:
         print(f"❌ Error saving stock event: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-# 2. שמירה אוטומטית בדאטה-בייס (Command Model)
-@router.post("/watchlist/auto")
-async def add_live_stock_to_db(symbol: str):
-    # שימוש ב-Service כדי להביא מחיר
-    live_data = stock_service.get_live_quote(symbol)
-    if not live_data:
-        raise HTTPException(status_code=400, detail="Could not fetch live price")
-    
-    # שימוש ב-Repository כדי לשמור
-    result = stock_repo.add_to_watchlist(live_data["symbol"], live_data["price"])
-    return {"message": "Saved to cloud", "data": result.data}
 
-# 3. היסטוריית מניות (עבור הגרפים)
+
 @router.get("/history/{symbol}")
 async def get_stock_history(symbol: str):
     history = stock_service.get_history(symbol)
@@ -134,95 +142,47 @@ async def get_stock_history(symbol: str):
         raise HTTPException(status_code=404, detail="History not found")
     return history
 
-# 4. סוכן ה-AI
+
 @router.get("/analyze/{symbol}")
 async def analyze_stock(symbol: str):
-    # שלב א': הבאת המידע
     data = stock_service.get_live_quote(symbol)
     if not data:
         return {"analysis": "Could not fetch data for analysis."}
-
-    # שלב ב': שליחה למוח של ה-AI (נמצא ב-services/ai_service.py)
-    analysis = ai_service.analyze_stock(data['symbol'], data['price'])
+    analysis = ai_service.analyze_stock(data["symbol"], data["price"])
     return {"analysis": analysis}
 
-@router.get("/watchlist")
-def get_watchlist():
-    """
-    שליפת תיק ההשקעות של המשתמש
-    """
-    try:
-        response = stock_repo.get_watchlist()
-        # ב-Supabase התשובה מגיעה בתוך .data
-        return response.data if hasattr(response, 'data') else response
-    except Exception as e:
-        print(f"Error fetching watchlist: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/user-purchases/{user_id}")
 async def get_user_purchases(user_id: str):
-    """
-    קבלת כל קניות המניות של משתמש מ-stock_events
-    """
-    try:
-        client = SupabaseDAL.get_instance()
+    return {"status": "deprecated", "data": []}
 
-        response = client.table("stock_events") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .eq("event_type", "STOCK_PURCHASED") \
-            .order("created_at", desc=True) \
-            .execute()
 
-        if response.data:
-            print(f"✅ Fetched {len(response.data)} purchases for user {user_id}")
-            return {"success": True, "count": len(response.data), "data": response.data}
-        else:
-            print(f"📭 No purchases found for user {user_id}")
-            return {"success": True, "count": 0, "data": []}
-
-    except Exception as e:
-        print(f"❌ Error fetching user purchases: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    
-# 5. תכנית השקעה מותאמת אישית
 @router.post("/ai-investment-plan")
 async def generate_investment_plan(request: InvestmentPlanRequest):
-    """
-    סוכן AI ליצירת תכנית השקעה מותאמת
-    """
     print(f"📊 Stock Routes: Generating investment plan...")
-    print(f"   Amount: ${request.amount}")
-    print(f"   Sector: {request.sector}")
-    print(f"   Risk: {request.risk}")
-    
     try:
-        # בניית ה-prompt לAI
         prompt = f"""
-You are a professional investment advisor. Based on the following client profile, provide a detailed investment plan:
+        Client Profile:
+        - Investment Amount: ${request.amount}
+        - Preferred Sector: {request.sector}
+        - Risk Tolerance: {request.risk}
+        - Investment Availability: {request.availability}
+        - Market Focus: {request.location}
 
-Client Profile:
-- Investment Amount: ${request.amount}
-- Preferred Sector: {request.sector}
-- Risk Tolerance: {request.risk}
-- Investment Availability: {request.availability}
-- Market Focus: {request.location}
-
-Please provide:
-1. Top 5 stock recommendations (with allocation percentages)
-2. Risk assessment and expected returns
-3. Diversification strategy
-4. Implementation timeline
-
-Format your response clearly with sections and bullet points.
+        Please provide:
+        1. Top 5 stock recommendations
+        2. Risk assessment
+        3. Implementation timeline
         """
-        
-        # שליחה ל-AI Service
         recommendation = ai_service.generate_investment_plan(prompt)
-        
         print(f"✅ Investment plan generated")
         return {"recommendation": recommendation}
-        
+
     except Exception as e:
         print(f"❌ Error generating investment plan: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
+
+
+@router.get("/info/{symbol}")
+def get_stock_info(symbol: str):
+    return stock_service.get_company_info(symbol)

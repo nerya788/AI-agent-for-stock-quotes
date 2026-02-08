@@ -8,7 +8,7 @@ class AuthRepository:
     def __init__(self):
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_KEY")
-        self.supabase = create_client(url, key)
+        self.dal = create_client(url, key)
 
     def register_user(self, email, password, full_name=None):
         """
@@ -17,7 +17,7 @@ class AuthRepository:
         try:
             print(f"🔐 AuthRepository: Registering {email} via Supabase Auth...")
             # שימוש ב-Auth API של Supabase
-            response = self.supabase.auth.sign_up({
+            response = self.dal.auth.sign_up({
                 "email": email,
                 "password": password,
                 "options": {
@@ -38,7 +38,7 @@ class AuthRepository:
         """
         try:
             print(f"🔐 AuthRepository: Logging in {email} via Supabase Auth...")
-            response = self.supabase.auth.sign_in_with_password({
+            response = self.dal.auth.sign_in_with_password({
                 "email": email,
                 "password": password
             })

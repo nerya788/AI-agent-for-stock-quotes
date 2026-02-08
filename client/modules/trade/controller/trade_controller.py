@@ -1,217 +1,105 @@
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QMessageBox, QStackedWidget
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QMessageBox
 from client.modules.trade.view.trade_view import TradeView
-import requests
+from client.modules.trade.models.trade_model import TradeModel # ייבוא המודל החדש
 
 class TradeController(QDialog):
     def __init__(self, parent=None, app_controller=None):
         super().__init__(parent)
         self.app = app_controller
-        self.setModal(True)
-        self.setWindowTitle("Trade Window")
-        
-        self.trade_view = TradeView()
+        self.model = TradeModel() # יצירת המודל
 
+        self.setModal(True)
+        self.trade_view = TradeView()
+        
         layout = QVBoxLayout()
         layout.addWidget(self.trade_view)
         layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
 
-        self.setup_connections()
-
-    def setup_connections(self):
         self.trade_view.on_trade_clicked.connect(self.execute_trade)
         self.trade_view.on_cancel_clicked.connect(self.reject)
 
-    def _load_saved_cards(self):
-        if self.app and hasattr(self.app, 'current_user') and self.app.current_user:
-            try:
-                user_id = self.app.current_user.id
-                print(f"🔍 Loading saved cards for user: {user_id}")
-                
-                cards_response = self.app.api.get_saved_cards(user_id)
-                print(f"📥 Cards Response: {cards_response}")
-                
-                if cards_response.get("status") == "success":
-                    cards = cards_response.get("cards", [])
-                    print(f"✅ Loaded {len(cards)} saved cards")
-                    self.trade_view.load_saved_cards(cards)
-                else:
-                    print(f"⚠️ No cards found or error: {cards_response}")
-                    self.trade_view.load_saved_cards([])
-            except Exception as e:
-                print(f"❌ Exception loading saved cards: {e}")
-                import traceback
-                traceback.print_exc()
-                self.trade_view.load_saved_cards([])
-        else:
-            print("⚠️ No current user or app_controller not available")
-            self.trade_view.load_saved_cards([])
+    def _load_user_context(self):
+        """טעינת כרטיסים מהמודל"""
+        if self.app and self.app.current_user:
+            user_id = self.app.current_user.id            
+            response = self.model.get_saved_cards(user_id)
+            
+            if response.get("status") == "success":
+                cards = response.get("cards", [])
+                self.trade_view.load_saved_cards(cards)
 
     def open_purchase_window(self, symbol, price):
-        self.setWindowTitle("Trade Window - Buy")
+        self.setWindowTitle(f"Buy {symbol}")
         self.trade_view.set_mode("buy")
-        self.trade_view.set_stock_data(symbol, price, 0, 0)
-        self._load_saved_cards()
+        self.trade_view.set_stock_data(symbol, price)
+        self._load_user_context()
         self.exec()
 
     def open_sale_window(self, symbol, current_price, available_qty, buy_price, event_id):
-        """פתיחת חלון מכירה לקנייה ספציפית"""
-        self.setWindowTitle("Trade Window - Sell")
+        self.setWindowTitle(f"Sell {symbol}")
         self.trade_view.set_mode("sell")
         self.trade_view.set_stock_data(symbol, current_price, available_qty, buy_price, event_id)
-        self._load_saved_cards()
+        self._load_user_context()
         self.exec()
 
-    def execute_purchase(self, data):
-        print(f"🚀 Starting purchase process for {data['symbol']}...")
-
-        # הוסף user_id מ-app_controller
-        if self.app and hasattr(self.app, 'current_user') and self.app.current_user:
-            data['user_id'] = self.app.current_user.id
-        else:
-            QMessageBox.warning(self, "Authentication Error", "User not logged in.")
-            return
-
-        # ולידציה בסיסית לפני שליחה
-        if len(data['card_number']) != 16:
-            QMessageBox.warning(self, "Invalid Card", "Card number must be exactly 16 digits.")
-            return
-        if not data['card_holder']:
-            QMessageBox.warning(self, "Missing Name", "Please enter card holder name.")
-            return
-
-        try:
-            # כתובת ה-API שלך
-            url = "http://127.0.0.1:8000/trade/buy"
-            print(f"📡 Sending POST request to: {url}")
-            
-            response = requests.post(url, json=data, timeout=5) # הוספתי Timeout
-            
-            print(f"📥 Server Response Code: {response.status_code}")
-            
-            if response.status_code == 200:
-                print("✅ Purchase successful!")
-                QMessageBox.information(self, "Success! 🎉", 
-                                      f"Purchase Completed!\nBought {data['amount']} shares of {data['symbol']}.\n\nCheck your Dashboard to see the new stock.")
-                
-                # הוסף למניות ועדכן דשבורד
-                if self.app and hasattr(self.app, 'portfolio_module'):
-                    stock_entry = {
-                        "symbol": data['symbol'],
-                        "price": float(data.get('price', 0)),
-                        "sector": "N/A",
-                        "change_percent": 0,
-                        "amount": int(data.get('amount', 0))
-                    }
-                    self.app.portfolio_module.add_stock_entry(stock_entry)
-
-                # שמור את האירוע ל-stock_events עם user_id
-                if self.app and hasattr(self.app, 'current_user') and self.app.current_user:
-                    try:
-                        event_url = "http://127.0.0.1:8000/stocks/event"
-                        event_data = {
-                            "user_id": self.app.current_user.id,
-                            "symbol": data['symbol'],
-                            "event_type": "STOCK_PURCHASED",
-                            "payload": {
-                                "amount": int(data.get('amount', 0)),
-                                "price": float(data.get('price', 0)),
-                                "total": float(data.get('price', 0)) * int(data.get('amount', 0))
-                            }
-                        }
-                        event_response = requests.post(event_url, json=event_data, timeout=5)
-                        if event_response.status_code == 200:
-                            print(f"✅ Stock event recorded for user {self.app.current_user.id}")
-                            if self.app and hasattr(self.app, 'portfolio_module'):
-                                self.app.portfolio_module.load_watchlist()
-                        else:
-                            print(f"⚠️ Warning: Could not record stock event: {event_response.text}")
-                    except Exception as e:
-                        print(f"⚠️ Warning: Error recording stock event: {e}")
-
-                self.accept() # סוגר את החלון בהצלחה ומחזיר שליטה
-            else:
-                try:
-                    error_detail = response.json().get('detail', response.text)
-                except:
-                    error_detail = response.text
-                
-                print(f"❌ Server Error: {error_detail}")
-                QMessageBox.critical(self, "Transaction Failed", f"Server Error:\n{error_detail}")
-                
-        except requests.exceptions.ConnectionError:
-            print("❌ Connection Error: Server is down or unreachable.")
-            QMessageBox.critical(self, "Network Error", "Could not connect to the server.\nIs the backend running?")
-        except Exception as e:
-            print(f"❌ Unexpected Error: {e}")
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred:\n{e}")
-
     def execute_trade(self, data):
-        """ביצוע קנייה או מכירה בהתאם למצב"""
-        if self.trade_view.trade_mode == "buy":
-            self.execute_purchase(data)
-        else:
-            self.execute_sale(data)
+        # 1. אימות משתמש
+        if not self.app or not self.app.current_user:
+            QMessageBox.warning(self, "Error", "User not logged in")
+            return
+        data['user_id'] = self.app.current_user.id
 
-    def execute_sale(self, data):
-        print(f"🚀 Starting sale process for {data['symbol']}...")
-
-        # הוסף user_id מ-app_controller
-        if self.app and hasattr(self.app, 'current_user') and self.app.current_user:
-            data['user_id'] = self.app.current_user.id
-        else:
-            QMessageBox.warning(self, "Authentication Error", "User not logged in.")
+        # 2. ולידציה דרך המודל (MVC!)
+        errors = self.model.validate_purchase_input(data)
+        if errors:
+            QMessageBox.warning(self, "Input Error", "\n".join(errors))
             return
 
-        # ולידציה בסיסית לפני שליחה
-        if len(data['card_number']) != 16:
-            QMessageBox.warning(self, "Invalid Card", "Card number must be exactly 16 digits.")
-            return
-        if not data['card_holder']:
-            QMessageBox.warning(self, "Missing Name", "Please enter card holder name.")
-            return
-
+        # 3. שליחה לשרת דרך המודל
+        real_sector = self.model.get_stock_sector(data['symbol'])
+        data['sector'] = real_sector
+        mode = self.trade_view.trade_mode
         try:
-            # כתובת ה-API שלך
-            url = "http://127.0.0.1:8000/trade/sell"
-            print(f"📡 Sending POST request to: {url}")
-            
-            response = requests.post(url, json=data, timeout=5)
-            
-            print(f"📥 Server Response Code: {response.status_code}")
+            print(f"🚀 Sending {mode} request via Model...")
+            # --- DEBUG TRAP #1 (Client) ---
+            print("\n🔍 --- DEBUG CLIENT START ---")
+            print(f"1. User ID in App: {self.app.current_user.id if self.app.current_user else 'NONE'}")
+            print(f"2. Data to send: {data}")
+            print(f"3. User ID inside Data dict: {data.get('user_id')}")
+            print("🔍 --- DEBUG CLIENT END ---\n")
+            # ------------------------------
+            response = self.model.send_trade_request(mode, data)
             
             if response.status_code == 200:
-                print("✅ Sale successful!")
-                
-                income = data['amount'] * data['current_price']
-                pnl = (data['current_price'] - data['buy_price']) * data['amount']
-                
-                message = f"Sale Completed!\nSold {data['amount']} shares of {data['symbol']}.\n"
-                message += f"Income: ${income:,.2f}\n"
-                message += f"Profit/Loss: ${pnl:,.2f}\n\n"
-                message += f"Check your Dashboard to see the updated portfolio."
-                
-                QMessageBox.information(self, "Success! 🎉", message)
-                
-                # עדכן את הדשבורד עם הנתונים החדשים
-                if self.app and hasattr(self.app, 'portfolio_module'):
-                    print("🔄 Refreshing dashboard after sale...")
-                    self.app.portfolio_module.load_watchlist()
-                    print("✅ Dashboard refreshed!")
-
-                self.accept()
+                self._handle_success(data, mode)
             else:
-                try:
-                    error_detail = response.json().get('detail', response.text)
-                except:
-                    error_detail = response.text
+                err = response.json().get('detail', 'Unknown error')
+                QMessageBox.critical(self, "Failed", f"Server Error: {err}")
                 
-                print(f"❌ Server Error: {error_detail}")
-                QMessageBox.critical(self, "Transaction Failed", f"Server Error:\n{error_detail}")
-                
-        except requests.exceptions.ConnectionError:
-            print("❌ Connection Error: Server is down or unreachable.")
-            QMessageBox.critical(self, "Network Error", "Could not connect to the server.\nIs the backend running?")
         except Exception as e:
-            print(f"❌ Unexpected Error: {e}")
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred:\n{e}")
+            QMessageBox.critical(self, "Error", f"Connection failed: {e}")
+
+    def _handle_success(self, data, mode):
+        print(f"✅ {mode} successful")
+        
+        if mode == "buy":
+            # --- שליפת סקטור אמיתי דרך המודל ---
+            real_sector = self.model.get_stock_sector(data['symbol'])
+            
+            # עדכון דשבורד
+            if self.app and hasattr(self.app, 'portfolio_module'):
+                stock_entry = {
+                    "symbol": data['symbol'],
+                    "price": float(data.get('price', 0)), # בתיקון קודם היה current_price
+                    "sector": real_sector, # הסקטור האמיתי!
+                    "amount": int(data.get('amount', 0))
+                }
+                self.app.portfolio_module.add_stock_entry(stock_entry)
+        
+        # רענון כללי
+        if self.app and hasattr(self.app, 'portfolio_module'):
+            self.app.portfolio_module.load_watchlist()
+
+        QMessageBox.information(self, "Success", f"Transaction ({mode}) completed successfully!")
+        self.accept()
