@@ -31,25 +31,19 @@ class InvestmentPlanRequest(BaseModel):
     location: str
 
 
-# --- 1. התיקון הקריטי לדשבורד (Watchlist לפי User ID) ---
+# --- 1. התיקון המקצועי לדשבורד ---
 @router.get("/watchlist/{user_id}")
 async def get_watchlist(user_id: str):
-    """
-    מחזיר את התיק הנוכחי (Watchlist) של המשתמש הספציפי
-    """
-    print(f"📊 Serving watchlist for user: {user_id}")
+    print(f"📊 API Layer: Requesting watchlist for user {user_id}")
     try:
-        # שליפה ישירה מהטבלה stocks_watchlist לפי user_id
-        response = (
-            dal.table("stocks_watchlist").select("*").eq("user_id", user_id).execute()
-        )
+        # במקום לפנות ל-dal, פונים ל-Repository
+        response = stock_repo.get_watchlist(user_id)
 
-        data = response.data if response.data else []
-        print(f"✅ Found {len(data)} items in watchlist.")
-        return {"status": "success", "data": data}
+        # ה-Repository מחזיר לנו אובייקט של Supabase, אנחנו מוציאים את ה-data
+        return {"status": "success", "data": response.data if response.data else []}
 
     except Exception as e:
-        print(f"❌ Error fetching watchlist: {e}")
+        print(f"❌ API Layer Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -113,25 +107,23 @@ async def get_popular_stocks():
 
 @router.post("/event")
 async def record_stock_event(event: StockEventRequest):
+    print(f"✅ API Layer: Recording event {event.event_type} for {event.symbol}")
     try:
-        data = {
-            "user_id": event.user_id,
-            "symbol": event.symbol.upper(),
-            "event_type": event.event_type,
-            "payload": event.payload,
-            "created_at": datetime.utcnow().isoformat(),
-        }
-
-        response = dal.table("stock_events").insert(data).execute()
+        # במקום ה-dal.table(...).insert הישן, משתמשים ב-Repo:
+        response = stock_repo.record_event(
+            symbol=event.symbol,
+            event_type=event.event_type,
+            payload=event.payload,
+            user_id=event.user_id,
+        )
 
         if response.data:
-            print(f"✅ Stock event saved: {event.symbol} for user {event.user_id}")
             return {"success": True, "data": response.data[0]}
         else:
             raise HTTPException(status_code=500, detail="Failed to save event")
 
     except Exception as e:
-        print(f"❌ Error saving stock event: {e}")
+        print(f"❌ API Layer Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
