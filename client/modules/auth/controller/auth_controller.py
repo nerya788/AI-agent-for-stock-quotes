@@ -2,33 +2,35 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QMessageBox
 from client.modules.auth.view.login_view import LoginView
 from client.modules.auth.view.register_view import RegisterView
 from client.core.api_client import APIClient
-# וודא שהמודל קיים במיקום הזה
 from client.modules.auth.models.user_model import UserModel
+from client.core.worker_thread import WorkerThread  # <--- הטורבו שלנו
+
 
 class AuthController(QWidget):
     def __init__(self, app_controller):
         super().__init__()
-        self.app = app_controller # רפרנס לאפליקציה הראשית
+        self.app = app_controller
         self.api = APIClient()
-        
-        # ניהול פנימי של ה-Views בתוך המודול הזה
+        self.worker = None  # משתנה לשמירת התהליכון
+
+        # ניהול פנימי של ה-Views
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
-        
+
         self.login_view = LoginView()
         self.register_view = RegisterView()
-        
+
         # מתחילים עם לוגין
         self.current_view = self.login_view
         self.layout.addWidget(self.current_view)
-        
+
         self.setup_connections()
 
     def setup_connections(self):
-        # מעברים פנימיים (Login <-> Register)
+        # מעברים פנימיים
         self.login_view.switch_to_register.connect(self.show_register)
         self.register_view.switch_to_login.connect(self.show_login)
-        
+
         # פעולות מול השרת
         self.login_view.login_btn.clicked.connect(self.handle_login)
         self.register_view.reg_btn.clicked.connect(self.handle_register)
@@ -38,7 +40,6 @@ class AuthController(QWidget):
         self.current_view.hide()
         self.current_view = self.register_view
         self.layout.addWidget(self.current_view)
-        self.register_view.reset_password_visibility()
         self.current_view.show()
 
     def show_login(self):
@@ -46,91 +47,102 @@ class AuthController(QWidget):
         self.current_view.hide()
         self.current_view = self.login_view
         self.layout.addWidget(self.current_view)
-        self.login_view.reset_password_visibility()
         self.current_view.show()
+
+    # --- משימות רקע (Background Tasks) ---
+
+    def _login_task(self, email, password):
+        """ביצוע ההתחברות מול השרת ברקע"""
+        return self.api.login(email, password)
+
+    def _register_task(self, email, password, full_name):
+        """ביצוע הרישום מול השרת ברקע"""
+        return self.api.register(email, password, full_name)
+
+    # --- לוגיקה להתחברות (Login) ---
 
     def handle_login(self):
         email = self.login_view.email_input.text()
         password = self.login_view.pass_input.text()
-        
-        # 1. ולידציה בסיסית
+
         if not email or not password:
             QMessageBox.warning(self, "שגיאה", "נא למלא את כל השדות")
             return
 
-        print(f"📡 Auth Controller: Sending login request for {email}...")
-        
-        try:
-            # 2. שליחה לשרת
-            response = self.api.login(email, password)
-            
-            # 3. בדיקת הצלחה
-            if response and response.get("status") == "success":
-                # --- כאן השינוי הגדול (MVC) ---
-                
-                # א. המרת המידע הגולמי למודל חכם
+        # עדכון UI - נעילת כפתור ושינוי טקסט
+        self.login_view.login_btn.setEnabled(False)
+        self.login_view.login_btn.setText("מתחבר... ⏳")
+
+        # הפעלת Worker
+        self.worker = WorkerThread(self._login_task, email, password)
+        self.worker.finished.connect(self.on_login_complete)
+        self.worker.error.connect(self.on_auth_error)
+        self.worker.start()
+
+    def on_login_complete(self, response):
+        """טיפול בתשובה מהשרת אחרי לוגין"""
+        # החזרת הכפתור למצב רגיל
+        self.login_view.login_btn.setEnabled(True)
+        self.login_view.login_btn.setText("Login")
+
+        if response and response.get("status") == "success":
+            try:
                 user_data = response.get("user", {})
                 user_model = UserModel.from_json(user_data)
-                
+
                 print(f"✅ Login Successful! User: {user_model.full_name}")
-                
-                # ב. עדכון ה-Session באפליקציה הראשית
                 self.app.set_user_session(user_model)
-                
-                # ג. מעבר מסך
                 self.app.navigate_to_portfolio()
-            else:
-                # כישלון בהתחברות (סיסמה שגויה וכו')
-                error_msg = response.get("detail", "Login failed")
-                print(f"❌ Login Failed: {error_msg}")
-                QMessageBox.warning(self, "שגיאת התחברות", str(error_msg))
-                
-        except Exception as e:
-            # שגיאת רשת או קריסה
-            print(f"❌ Connection Error: {e}")
-            QMessageBox.critical(self, "שגיאת מערכת", f"לא ניתן להתחבר לשרת:\n{e}")
+            except Exception as e:
+                QMessageBox.critical(self, "שגיאה", f"שגיאה בעיבוד נתוני משתמש: {e}")
+        else:
+            error_msg = response.get("detail", "Login failed")
+            QMessageBox.warning(self, "שגיאת התחברות", str(error_msg))
+
+    # --- לוגיקה לרישום (Register) ---
 
     def handle_register(self):
-        # קבלת הנתונים מהטופס
         full_name = self.register_view.name_input.text()
         email = self.register_view.email_input.text()
         password = self.register_view.pass_input.text()
-        
-        # ולידציה בסיסית
+
         if not email or not password or not full_name:
             QMessageBox.warning(self, "שגיאה", "נא למלא את כל השדות")
             return
-        
+
         if len(password) < 6:
             QMessageBox.warning(self, "שגיאה", "הסיסמה חייבת להכיל לפחות 6 תווים")
             return
-        
-        print(f"📡 Auth Controller: Sending register request for {email}...")
-        
-        try:
-            # שליחה לשרת
-            response = self.api.register(email, password, full_name)
-            
-            print(f"📥 Response: {response}")
-            
-            # בדיקת הצלחה
-            if response and response.get("status") == "success":
-                print(f"✅ Registration Successful for {email}")
-                QMessageBox.information(self, "הצלחה! 🎉", 
-                    f"המשתמש {full_name} נרשם בהצלחה!\nכעת תוכל להתחבר.")
-                
-                # ניקוי השדות ומעבר ללוגין
-                self.register_view.name_input.clear()
-                self.register_view.email_input.clear()
-                self.register_view.pass_input.clear()
-                self.show_login()
-            else:
-                # כישלון ברישום
-                error_msg = response.get("detail", "Registration failed")
-                print(f"❌ Registration Failed: {error_msg}")
-                QMessageBox.warning(self, "שגיאת רישום", str(error_msg))
-                
-        except Exception as e:
-            # שגיאת רשת או קריסה
-            print(f"❌ Registration Error: {e}")
-            QMessageBox.critical(self, "שגיאת מערכת", f"לא ניתן להתחבר לשרת:\n{e}")
+
+        # עדכון UI
+        self.register_view.reg_btn.setEnabled(False)
+        self.register_view.reg_btn.setText("נרשם... ⏳")
+
+        # הפעלת Worker
+        self.worker = WorkerThread(self._register_task, email, password, full_name)
+        self.worker.finished.connect(self.on_register_complete)
+        self.worker.error.connect(self.on_auth_error)
+        self.worker.start()
+
+    def on_register_complete(self, response):
+        """טיפול בתשובה מהשרת אחרי רישום"""
+        self.register_view.reg_btn.setEnabled(True)
+        self.register_view.reg_btn.setText("Register")
+
+        if response and response.get("status") == "success":
+            QMessageBox.information(self, "הצלחה! 🎉",
+                                    "ההרשמה בוצעה בהצלחה!\nכעת ניתן להתחבר.")
+            self.show_login()
+        else:
+            error_msg = response.get("detail", "Registration failed")
+            QMessageBox.warning(self, "שגיאת רישום", str(error_msg))
+
+    def on_auth_error(self, error_msg):
+        """טיפול בשגיאות תקשורת כלליות"""
+        # שחרור הכפתורים בשני המסכים למקרה של שגיאה
+        self.login_view.login_btn.setEnabled(True)
+        self.login_view.login_btn.setText("Login")
+        self.register_view.reg_btn.setEnabled(True)
+        self.register_view.reg_btn.setText("Register")
+
+        QMessageBox.critical(self, "שגיאת תקשורת", f"לא ניתן להתחבר לשרת:\n{error_msg}")
