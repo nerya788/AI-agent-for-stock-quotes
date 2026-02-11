@@ -63,6 +63,22 @@ class APIClient:
             print(f"API Error (Popular): {e}")
             return {"stocks": []}
 
+    def get_stock_news(self, symbol, lang: str | None = None):
+        """חדשות מדורגות לפי חשיבות עבור מניה מסוימת.
+
+        lang: 'en' (ברירת מחדל) או 'he' לתרגום לעברית בצד השרת.
+        """
+        try:
+            url = f"{self.base_url}/stocks/news/{symbol}"
+            params = {"lang": lang} if lang else None
+            response = requests.get(url, params=params)
+            if response.status_code == 200:
+                return response.json()
+            return {"symbol": symbol.upper(), "news": []}
+        except Exception as e:
+            print(f"API Error (News): {e}")
+            return {"symbol": symbol.upper(), "news": []}
+
     # --- AI Features ---
     def get_ai_analysis(self, symbol):
         try:

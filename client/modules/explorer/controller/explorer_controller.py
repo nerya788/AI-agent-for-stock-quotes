@@ -8,6 +8,8 @@ class ExplorerController:
         self.app = app_controller
         self.view = ExplorerView() # יצירת ה-View
         self.api = APIClient()
+        self.current_symbol = None
+        self.current_news_lang = "en"  # 'en' or 'he'
         
         self.setup_connections()
 
@@ -18,11 +20,15 @@ class ExplorerController:
         self.view.back_btn.clicked.connect(self.handle_back)
         self.view.trade_btn.clicked.connect(self.open_trade_window)
         self.view.browse_btn.clicked.connect(self.show_popular_stocks)
+        self.view.translate_btn.clicked.connect(self.handle_translate_news)
 
 
     def handle_search(self):
         symbol = self.view.symbol_input.text().upper().strip()
         if not symbol: return
+
+        self.current_symbol = symbol
+        self.current_news_lang = "en"
 
         self.view.info_label.setText("Fetching data...")
         
@@ -33,6 +39,7 @@ class ExplorerController:
             self.view.ai_btn.setEnabled(True)
             self.view.save_btn.setEnabled(True)
             self.view.trade_btn.setEnabled(True)
+            self.view.translate_btn.setEnabled(True)
             
             # 2. קבלת היסטוריה לגרף (רשימת מחירים)
             history = self.api.get_stock_history(symbol)
@@ -43,9 +50,12 @@ class ExplorerController:
                 prices = history.get('prices', [])
                 formatted_data = [{'price': p} for p in prices] 
                 self.view.plot_chart(symbol, formatted_data)
+            # 3. טעינת חדשות מדורגות למניה
+            self.load_news_for_symbol(symbol, lang=self.current_news_lang)
         else:
             self.view.info_label.setText("Stock not found.")
             self.view.trade_btn.setEnabled(False)
+            self.view.translate_btn.setEnabled(False)
 
     def handle_ai(self):
         symbol = self.view.symbol_input.text().upper().strip()
@@ -73,6 +83,31 @@ class ExplorerController:
                 QMessageBox.warning(self.view, "Error", "Failed to save stock.")
         except Exception as e:
             QMessageBox.critical(self.view, "Error", f"Connection error: {e}")
+
+    def load_news_for_symbol(self, symbol: str, lang: str | None = None):
+        """טעינת חדשות מהמנוע החדש והצגתן בפאנל החדשות."""
+        try:
+            self.view.set_news_loading(symbol)
+            result = self.api.get_stock_news(symbol, lang=lang)
+            news_items = result.get("news", []) if isinstance(result, dict) else []
+            self.view.show_news_items(symbol, news_items)
+        except Exception as e:
+            print(f"❌ Error loading news for {symbol}: {e}")
+
+    def handle_translate_news(self):
+        """כפתור תרגום/חזרה לאנגלית לפיד החדשות."""
+        if not self.current_symbol:
+            return
+
+        # Toggle בין עברית לאנגלית
+        if self.current_news_lang == "en":
+            self.current_news_lang = "he"
+            self.view.translate_btn.setText("הצג באנגלית 🌐")
+            self.load_news_for_symbol(self.current_symbol, lang="he")
+        else:
+            self.current_news_lang = "en"
+            self.view.translate_btn.setText("תרגם לעברית 🇮🇱")
+            self.load_news_for_symbol(self.current_symbol, lang="en")
 
     def handle_back(self):
         """חזרה לדשבורד דרך ה-AppController"""

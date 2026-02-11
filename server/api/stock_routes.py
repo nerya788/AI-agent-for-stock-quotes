@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from server.services.stock_service import StockService
 from server.services.ai_service import AIService
+from server.services.news_service import NewsService
 from server.repositories.stock_repository import StockRepository
 from server.dal.supabase_client import SupabaseDAL
 from datetime import datetime
@@ -11,6 +12,7 @@ router = APIRouter(prefix="/stocks", tags=["Stocks"])
 # אתחול השירותים
 stock_service = StockService()
 ai_service = AIService()
+news_service = NewsService()
 stock_repo = StockRepository()
 dal = SupabaseDAL.get_instance()
 
@@ -29,6 +31,18 @@ class InvestmentPlanRequest(BaseModel):
     risk: str
     availability: str
     location: str
+
+
+class NewsItem(BaseModel):
+    title: str
+    summary: str | None = None
+    url: str | None = None
+    published_at: str | None = None
+
+
+class NewsRankingRequest(BaseModel):
+    symbol: str
+    news: list[NewsItem]
 
 
 # --- 1. התיקון המקצועי לדשבורד ---
@@ -142,6 +156,45 @@ async def analyze_stock(symbol: str):
         return {"analysis": "Could not fetch data for analysis."}
     analysis = ai_service.analyze_stock(data["symbol"], data["price"])
     return {"analysis": analysis}
+
+
+@router.get("/news/{symbol}")
+async def get_ranked_news_for_symbol(symbol: str, lang: str = "en"):
+    """החזרת חדשות מדורגות לפי חשיבות עבור מניה מסוימת.
+
+    1. שליפת חדשות מ-Finnhub דרך NewsService
+    2. דירוג החשיבות ע"י Hugging Face (AIService.rank_news_for_stock)
+    """
+    try:
+        raw_news = news_service.get_company_news(symbol)
+        if not raw_news:
+            return {"symbol": symbol.upper(), "news": []}
+
+        ranked = ai_service.rank_news_for_stock(symbol, raw_news)
+
+        if lang.lower() == "he":
+            ranked = ai_service.translate_news_items_to_hebrew(ranked)
+
+        return {"symbol": symbol.upper(), "news": ranked}
+    except Exception as e:
+        print(f"❌ Error fetching or ranking news for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch or rank news")
+
+
+@router.post("/news/rank")
+async def rank_news(request: NewsRankingRequest):
+    """דירוג פיד חדשות למניה לפי חשיבות, באמצעות Hugging Face (או MOCK fallback).
+
+    ה-client יכול להביא חדשות מכל API חיצוני, לשלוח אלינו רשימת ידיעות,
+    ולקבל בחזרה את אותן ידיעות עם שדה importance_score וממויין מהכי חשוב לפחות חשוב.
+    """
+    try:
+        raw_items = [item.model_dump() for item in request.news]
+        ranked = ai_service.rank_news_for_stock(request.symbol, raw_items)
+        return {"symbol": request.symbol.upper(), "news": ranked}
+    except Exception as e:
+        print(f"❌ Error ranking news: {e}")
+        raise HTTPException(status_code=500, detail="Failed to rank news items")
 
 
 @router.get("/user-purchases/{user_id}")
