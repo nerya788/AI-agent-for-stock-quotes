@@ -38,6 +38,7 @@ class AuthController(QWidget):
         self.current_view.hide()
         self.current_view = self.register_view
         self.layout.addWidget(self.current_view)
+        self.register_view.reset_password_visibility()
         self.current_view.show()
 
     def show_login(self):
@@ -45,6 +46,7 @@ class AuthController(QWidget):
         self.current_view.hide()
         self.current_view = self.login_view
         self.layout.addWidget(self.current_view)
+        self.login_view.reset_password_visibility()
         self.current_view.show()
 
     def handle_login(self):
