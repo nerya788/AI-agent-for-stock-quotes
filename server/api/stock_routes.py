@@ -159,26 +159,21 @@ async def analyze_stock(symbol: str):
 
 
 @router.get("/news/{symbol}")
-async def get_ranked_news_for_symbol(symbol: str, lang: str = "en"):
-    """החזרת חדשות מדורגות לפי חשיבות עבור מניה מסוימת.
-
-    1. שליפת חדשות מ-Finnhub דרך NewsService
-    2. דירוג החשיבות ע"י Hugging Face (AIService.rank_news_for_stock)
-    """
+async def get_ranked_news_for_symbol(symbol: str):
+    print(f"\n📡 DEBUG ROUTE: Fetching & Ranking news for {symbol}")
     try:
+        # 1. מביאים חדשות
         raw_news = news_service.get_company_news(symbol)
-        if not raw_news:
-            return {"symbol": symbol.upper(), "news": []}
+        
+        # 2. שולחים לדירוג (ה-AI Service כבר מוגבל ל-10 כתבות כדי שיהיה מהיר)
+        ranked_news = ai_service.rank_news_for_stock(symbol, raw_news)
+        
+        print("📡 DEBUG ROUTE: Finished Ranking")
+        return {"symbol": symbol.upper(), "news": ranked_news}
 
-        ranked = ai_service.rank_news_for_stock(symbol, raw_news)
-
-        if lang.lower() == "he":
-            ranked = ai_service.translate_news_items_to_hebrew(ranked)
-
-        return {"symbol": symbol.upper(), "news": ranked}
     except Exception as e:
-        print(f"❌ Error fetching or ranking news for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch or rank news")
+        print(f"❌ DEBUG ROUTE ERROR: {e}")
+        return {"symbol": symbol.upper(), "news": []}
 
 
 @router.post("/news/rank")
