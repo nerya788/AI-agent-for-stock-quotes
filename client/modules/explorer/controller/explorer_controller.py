@@ -19,9 +19,8 @@ class ExplorerController:
         self.setup_connections()
 
     def setup_connections(self):
+        # חיבורים לכפתורים שנשארו
         self.view.search_btn.clicked.connect(self.handle_search)
-        self.view.ai_btn.clicked.connect(self.handle_ai)
-        self.view.save_btn.clicked.connect(self.handle_save)
         self.view.back_btn.clicked.connect(self.handle_back)
         self.view.trade_btn.clicked.connect(self.open_trade_window)
         self.view.browse_btn.clicked.connect(self.show_popular_stocks)
@@ -34,11 +33,9 @@ class ExplorerController:
         history = self.api.get_stock_history(symbol)
         # מביא חדשות רגילות (מדורגות בשרת) ללא פרמטר שפה
         news_data = self.api.get_stock_news(symbol) 
-        return {"quote": quote, "history": history, "news": news_data}
-
-    def _ai_task(self, symbol):
-        response = self.api.get_ai_analysis(symbol)
-        return response.get('analysis', 'No analysis available.')
+        # בונוס: הפעלת AI אוטומטית (אם תרצה בעתיד) - כרגע לא מופעל
+        ai_analysis = self.api.get_ai_analysis(symbol).get('analysis', '')
+        return {"quote": quote, "history": history, "news": news_data, "analysis": ai_analysis}
 
     def _browse_task(self):
         return self.api.get_popular_stocks()
@@ -50,7 +47,7 @@ class ExplorerController:
         self.current_symbol = symbol
         self.view.info_label.setText("Fetching data... 🚀")
         self.view.search_btn.setEnabled(False)
-        self.view.ai_btn.setEnabled(False)
+        self.view.ai_result.setVisible(False) # איפוס תוצאת AI קודמת
 
         self.search_worker = WorkerThread(self._search_task, symbol)
         self.search_worker.finished.connect(self.on_search_ready)
@@ -63,8 +60,6 @@ class ExplorerController:
 
         if quote:
             self.view.info_label.setText(f"Stock: {quote['symbol']} | Price: ${quote['price']}")
-            self.view.ai_btn.setEnabled(True)
-            self.view.save_btn.setEnabled(True)
             self.view.trade_btn.setEnabled(True)
 
             history = data.get("history")
@@ -76,24 +71,16 @@ class ExplorerController:
             news_res = data.get("news", {})
             news_items = news_res.get("news", []) if isinstance(news_res, dict) else []
             self.view.show_news_items(quote['symbol'], news_items)
+            
+            # אם תרצה להציג את הניתוח אוטומטית:
+            analysis = data.get("analysis")
+            if analysis:
+                self.view.ai_result.setVisible(False)
+                self.view.ai_result.setText(f"💡 AI Insight: {analysis}")
+
         else:
             self.view.info_label.setText("Stock not found.")
             self.view.trade_btn.setEnabled(False)
-
-    def handle_ai(self):
-        symbol = self.view.symbol_input.text().upper().strip()
-        self.view.ai_result.setVisible(True)
-        self.view.ai_result.setText("AI is thinking... 🤖")
-        self.view.ai_btn.setEnabled(False)
-
-        self.ai_worker = WorkerThread(self._ai_task, symbol)
-        self.ai_worker.finished.connect(self.on_ai_ready)
-        self.ai_worker.error.connect(self.on_error)
-        self.ai_worker.start()
-
-    def on_ai_ready(self, analysis):
-        self.view.ai_btn.setEnabled(True)
-        self.view.ai_result.setText(f"💡 AI Analysis:\n{analysis}")
 
     def show_popular_stocks(self):
         self.view.info_label.setText("⏳ Loading popular stocks...")
@@ -114,7 +101,7 @@ class ExplorerController:
             return
 
         from PySide6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget,
-                                       QTableWidgetItem, QPushButton, QHeaderView) # Local import
+                                       QTableWidgetItem, QPushButton, QHeaderView)
 
         dialog = QDialog(self.view)
         dialog.setWindowTitle("Browse Popular Stocks 📊")
@@ -123,10 +110,6 @@ class ExplorerController:
 
         layout = QVBoxLayout(dialog)
         
-        header = QLabel("Top Stocks from S&P 500")
-        header.setStyleSheet("font-size: 16px; font-weight: bold; color: #89b4fa;")
-        layout.addWidget(header)
-
         table = QTableWidget()
         table.setColumnCount(4)
         table.setHorizontalHeaderLabels(["Symbol", "Name", "Price", "Action"])
@@ -146,28 +129,12 @@ class ExplorerController:
 
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         layout.addWidget(table)
-
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(dialog.close)
-        layout.addWidget(close_btn)
         dialog.exec()
 
     def search_stock_from_browse(self, symbol, dialog):
         self.view.symbol_input.setText(symbol)
         dialog.close()
         self.handle_search()
-
-    def handle_save(self):
-        symbol = self.view.symbol_input.text().upper().strip()
-        try:
-            resp = requests.post(f"http://127.0.0.1:8000/stocks/watchlist/auto?symbol={symbol}")
-            if resp.status_code == 200:
-                QMessageBox.information(self.view, "Success", f"Saved {symbol}!")
-            else:
-                QMessageBox.warning(self.view, "Error", "Failed to save stock.")
-
-        except Exception as e:
-            QMessageBox.critical(self.view, "Error", str(e))
 
     def handle_back(self):
         if hasattr(self.app, 'navigate_to_portfolio'):
@@ -190,6 +157,5 @@ class ExplorerController:
 
     def on_error(self, error_msg):
         self.view.search_btn.setEnabled(True)
-        self.view.ai_btn.setEnabled(True)
         self.view.browse_btn.setEnabled(True)
         self.view.info_label.setText(f"Error: {error_msg}")
