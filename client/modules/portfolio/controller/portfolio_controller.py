@@ -43,7 +43,7 @@ class PortfolioController(QWidget):
         # יצירת המסכים
         self.dashboard_view = DashboardView()
         self.investment_view = InvestmentView()
-        self.trade_controller = TradeController(parent=None, app_controller=self.app)
+        self.trade_controller = TradeController(parent=self, app_controller=self.app)
 
         self.stack.addWidget(self.dashboard_view)  # אינדקס 0
         self.stack.addWidget(self.investment_view)  # אינדקס 1
@@ -175,6 +175,11 @@ class PortfolioController(QWidget):
         self.investment_view.submit_btn.setEnabled(True)
         self.investment_view.submit_btn.setText("Generate AI Recommendation 🚀")
         self.investment_view.ai_response_box.setText(f"❌ Error: {error_msg}")
+        print(f"[DEBUG] on_ai_error called: {error_msg}")
+
+    def on_buy_error(self, error_msg):
+        print(f"[DEBUG] on_buy_error called: {error_msg}")
+        QMessageBox.critical(self, "Buy Error", str(error_msg))
 
     def load_watchlist(self):
         """טעינת התיק ברקע"""
@@ -182,6 +187,13 @@ class PortfolioController(QWidget):
 
         print("📊 Loading Portfolio in background...")
         user_id = self.app.current_user.id
+
+        # אם יש worker קודם שרץ, נסגור אותו קודם
+        if hasattr(self, 'watchlist_worker') and self.watchlist_worker is not None:
+            if self.watchlist_worker.isRunning():
+                print("[DEBUG] load_watchlist: Stopping previous watchlist_worker...")
+                self.watchlist_worker.quit()
+                self.watchlist_worker.wait()
 
         # הפעלת Worker לטעינת התיק
         self.watchlist_worker = WorkerThread(self._watchlist_task, user_id)
