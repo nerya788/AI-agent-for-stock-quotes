@@ -25,7 +25,7 @@ class AIService:
         try:
             # מנסים לייבא רק אם קיים
             from langchain_ollama import OllamaLLM
-            self.llm = OllamaLLM(model="llama3")
+            self.llm = OllamaLLM(model="llama3.2:1b")
             self.is_active = True
             print("✅ AI Service initialized (Ready to connect to Docker/Local Ollama)")
             

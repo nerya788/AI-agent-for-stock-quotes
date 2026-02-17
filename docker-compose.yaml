@@ -1,0 +1,12 @@
+services:
+  ollama:
+    image: ollama/ollama:latest  # זה מוריד את התוכנה לתוך הדוקר בלבד
+    container_name: ollama_backend
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama # זה שומר את המודלים בתיקייה מנוהלת של דוקר
+    restart: always
+
+volumes:
+  ollama_storage:
