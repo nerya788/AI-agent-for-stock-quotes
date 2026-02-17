@@ -1,8 +1,11 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QLineEdit, QPushButton, QTextEdit)
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
+                             QPushButton, QListWidget, QListWidgetItem, QLabel)
+from PySide6.QtCore import Qt, Signal
 
 class AdvisorView(QWidget):
+    # זה הסיגנל שהיה חסר לקונטרולר!
+    send_message = Signal(str)
+
     def __init__(self):
         super().__init__()
         self.init_ui()
@@ -16,33 +19,86 @@ class AdvisorView(QWidget):
         header.setAlignment(Qt.AlignCenter)
         layout.addWidget(header)
 
-        # אזור שאלה / חיפוש
-        input_layout = QHBoxLayout()
-        self.symbol_input = QLineEdit()
-        self.symbol_input.setPlaceholderText("Enter stock symbol to analyze (e.g. AAPL)...")
-        self.symbol_input.setStyleSheet("padding: 10px; background: #313244; color: white; border-radius: 5px;")
-        
-        self.analyze_btn = QPushButton("Ask AI")
-        self.analyze_btn.setStyleSheet("background-color: #cba6f7; color: #1e1e2e; padding: 10px; font-weight: bold;")
-        
-        input_layout.addWidget(self.symbol_input)
-        input_layout.addWidget(self.analyze_btn)
-        layout.addLayout(input_layout)
-
-        # אזור תשובה
-        self.result_area = QTextEdit()
-        self.result_area.setReadOnly(True)
-        self.result_area.setPlaceholderText("AI insights will appear here...")
-        self.result_area.setStyleSheet("""
-            QTextEdit {
+        # אזור ההיסטוריה של הצ'אט (במקום סתם תיבת טקסט)
+        self.chat_history = QListWidget()
+        self.chat_history.setStyleSheet("""
+            QListWidget {
                 background-color: #313244;
-                color: #cdd6f4;
                 border: 1px solid #45475a;
                 border-radius: 8px;
                 padding: 10px;
+                color: #cdd6f4;
                 font-size: 14px;
             }
+            QListWidget::item {
+                padding: 5px;
+            }
         """)
-        layout.addWidget(self.result_area)
+        self.chat_history.setWordWrap(True)
+        # גלילה חלקה
+        self.chat_history.setVerticalScrollMode(QListWidget.ScrollPerPixel)
+        layout.addWidget(self.chat_history)
+
+        # אזור ההקלדה (Input Area)
+        input_layout = QHBoxLayout()
+        
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("Ask me anything about stocks, or say 'buy AAPL'...")
+        self.input_field.setStyleSheet("""
+            QLineEdit {
+                padding: 10px; 
+                background: #45475a; 
+                color: white; 
+                border-radius: 5px;
+                border: 1px solid #585b70;
+            }
+            QLineEdit:focus {
+                border: 1px solid #89b4fa;
+            }
+        """)
+        self.input_field.returnPressed.connect(self.handle_send) # שליחה ב-Enter
+        
+        self.send_btn = QPushButton("Send 🚀")
+        self.send_btn.setCursor(Qt.PointingHandCursor)
+        self.send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #cba6f7; 
+                color: #1e1e2e; 
+                padding: 10px 20px; 
+                font-weight: bold;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #d8c3f5;
+            }
+        """)
+        self.send_btn.clicked.connect(self.handle_send)
+        
+        input_layout.addWidget(self.input_field)
+        input_layout.addWidget(self.send_btn)
+        layout.addLayout(input_layout)
 
         self.setLayout(layout)
+
+    def handle_send(self):
+        text = self.input_field.text().strip()
+        if text:
+            # הוספת ההודעה של המשתמש לצ'אט מיד
+            self.add_message("You", text, Qt.AlignRight)
+            # שידור הסיגנל לקונטרולר
+            self.send_message.emit(text)
+            self.input_field.clear()
+
+    def add_message(self, sender, text, alignment):
+        """פונקציית עזר להוספת הודעות יפות לצ'אט"""
+        item = QListWidgetItem(f"{sender}: {text}")
+        item.setTextAlignment(alignment)
+        
+        # צבע שונה ל-AI ולמשתמש
+        if sender == "AI":
+            item.setForeground(Qt.cyan) # או כל צבע שתרצה
+        else:
+            item.setForeground(Qt.white)
+            
+        self.chat_history.addItem(item)
+        self.chat_history.scrollToBottom()

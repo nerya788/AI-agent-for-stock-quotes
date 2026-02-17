@@ -52,11 +52,10 @@ class PortfolioController(QWidget):
 
     def setup_connections(self):
         # מעבר מדשבורד ל-"AI Advisor"
-        self.dashboard_view.ai_consult_btn.clicked.connect(self.show_investment)
-
+        self.dashboard_view.ai_consult_btn.clicked.connect(self.open_advisor_chat)
         # חיבור הכפתור של ה-AI ליצירת המלצה
         self.investment_view.submit_btn.clicked.connect(self.handle_ai_recommendation)
-
+        
         # כפתור חזרה לדשבורד
         self.investment_view.back_btn.clicked.connect(self.show_dashboard)
 
@@ -66,6 +65,12 @@ class PortfolioController(QWidget):
 
         if hasattr(self.dashboard_view, "explorer_btn"):
             self.dashboard_view.explorer_btn.clicked.connect(self.open_explorer)
+
+    def open_advisor_chat(self):
+        """מבקש מהאפליקציה הראשית לעבור למסך הצ'אט"""
+        print("🔀 Switching to AI Chat Module...")
+        if hasattr(self.app, "navigate_to_advisor"):
+            self.app.navigate_to_advisor()
 
     def show_investment(self):
         self.stack.setCurrentWidget(self.investment_view)

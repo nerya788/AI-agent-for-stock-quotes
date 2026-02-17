@@ -1,7 +1,7 @@
 # --- Frontend (Desktop UI) ---
-# Requirement: PySide 6/6.5 for MVP pattern [cite: 17]
+# Requirement: PySide 6/6.5 for MVP pattern
 PySide6>=6.5.0
-# Requirement: Visualization via QTCharts [cite: 17]
+# Requirement: Visualization via QTCharts
 shiboken6>=6.5.0
 
 # --- Backend & API ---
@@ -12,7 +12,7 @@ python-dotenv
 # Requirement: Server for running FastAPI 
 uvicorn[standard]
 yfinance
-# Requirement: API Gateway communication [cite: 19]
+# Requirement: API Gateway communication
 requests
 httpx
 
@@ -27,9 +27,11 @@ huggingface-hub
 # Requirement: AI Agent & automation (Langchain/Ollama) 
 langchain
 langchain-community
+langchain-ollama
+langchainhub
 
 # --- Utilities & Options ---
-# Requirement: Image storage (Optional) [cite: 23]
+# Requirement: Image storage (Optional)
 cloudinary
 # Environment variables management
 python-dotenv

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from server.models.agent_dto import AgentResponse
 from server.services.stock_service import StockService
 from server.services.ai_service import AIService
 from server.services.news_service import NewsService
 from server.repositories.stock_repository import StockRepository
 from server.dal.supabase_client import SupabaseDAL
 from datetime import datetime
+from server.services.agent_service import AgentService
 
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
 
@@ -13,6 +15,7 @@ router = APIRouter(prefix="/stocks", tags=["Stocks"])
 stock_service = StockService()
 ai_service = AIService()
 news_service = NewsService()
+agent_service = AgentService()
 stock_repo = StockRepository()
 dal = SupabaseDAL.get_instance()
 
@@ -44,6 +47,14 @@ class NewsRankingRequest(BaseModel):
     symbol: str
     news: list[NewsItem]
 
+
+class ChatRequest(BaseModel):
+    message: str
+    user_id: str
+
+@router.post("/agent/chat", response_model=AgentResponse)
+async def chat_with_agent(request: ChatRequest):
+    return agent_service.process_request(request.message, request.user_id)
 
 # --- 1. התיקון המקצועי לדשבורד ---
 @router.get("/watchlist/{user_id}")

@@ -1,11 +1,21 @@
 class AdvisorModel:
-    def __init__(self, symbol: str, analysis_text: str):
-        self.symbol = symbol
-        self.analysis_text = analysis_text
+    def __init__(self, response_type: str, message: str, trade_payload: dict = None):
+        self.response_type = response_type # "chat", "form", "trade_confirmation"
+        self.message = message
+        self.trade_payload = trade_payload
 
     @classmethod
-    def from_json(cls, symbol, data: dict):
+    def from_json(cls, data: dict):
+        """ממיר את תשובת השרת לאובייקט פייתון נוח"""
         return cls(
-            symbol=symbol,
-            analysis_text=data.get("analysis", "No analysis provided.")
+            response_type=data.get("response_type", "chat"),
+            message=data.get("message", ""),
+            trade_payload=data.get("trade_payload")
         )
+
+    # אפשר להוסיף כאן לוגיקה נוחה
+    def is_trade(self):
+        return self.response_type == "trade_confirmation"
+
+    def is_form(self):
+        return self.response_type == "form"
