@@ -1,4 +1,5 @@
 import os
+from urllib import response
 from langchain_ollama import OllamaLLM
 from langchain.agents import initialize_agent, AgentType
 from langchain.memory import ConversationBufferMemory
@@ -8,7 +9,7 @@ from server.models.agent_dto import AgentResponse
 from langchain_groq import ChatGroq
 
 USE_CLOUD = True
-GROQ_API_KEY = "" \
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 class AgentService:
     def __init__(self):
@@ -94,8 +95,7 @@ class AgentService:
         response = str(error)
         
         # 1. התיקון הקריטי: אם התגית נמצאת בתוך השגיאה - הצלנו את המצב!
-        if "<<CONFIRM_BUY:" in response:
-            # אנחנו מחזירים את התגית עצמה, וכך ה-process_request יתפוס אותה
+        if "<<CONFIRM_BUY:" in response or "<<CONFIRM_SELL:" in response:            # אנחנו מחזירים את התגית עצמה, וכך ה-process_request יתפוס אותה
             raise ValueError(f"###STOP_CHAIN_SUCCESS###{response}")
                  
         if "<<OPEN_INVESTMENT_FORM>>" in response:
@@ -113,14 +113,15 @@ class AgentService:
         enhanced_input = (
             f"User Request: {user_input}\n"
             f"Context: My User ID is {user_id}.\n"
-            "CRITICAL INSTRUCTIONS:\n"
-            "1. Step 1: Get the stock price.\n"
-            "2. Step 2: IF price is found -> STOP EVERYTHING ELSE.\n"
-            "3. Step 3: Output ONLY the confirmation tag.\n"
-            "   - Format: <<CONFIRM_BUY:SYMBOL,AMOUNT,PRICE>>\n"
-            "   - FORBIDDEN: Do NOT write 'I will proceed'. Do NOT write 'The price is...'.\n"
-            "   - FORBIDDEN: Do NOT ask for confirmation text. JUST OUTPUT THE TAG.\n"
-            "   - Example Final Answer: <<CONFIRM_BUY:AAPL,2,150.5>>"
+            "STRICT PROTOCOL FOR BUY/SELL:\n"
+            "1. Step 1: Use 'get_stock_price' to get the current value.\n"
+            "2. RESTRICTION: Do NOT use 'check_my_portfolio' if the user asks to Buy or Sell. Just execute.\n"
+            "3. Step 2: Once price is found -> STOP USING TOOLS IMMEDIATELY.\n"
+            "4. Step 3: Output ONLY the confirmation tag based on intent:\n"
+            "   - If BUYing  -> Final Answer: <<CONFIRM_BUY:SYMBOL,AMOUNT,PRICE>>\n"
+            "   - If SELLing -> Final Answer: <<CONFIRM_SELL:SYMBOL,AMOUNT,PRICE>>\n"
+            "   - Example: <<CONFIRM_BUY:AAPL,2,150.5>>\n"
+            "   - Example: <<CONFIRM_SELL:TSLA,1,700>>\n"
         )
         
         try:
@@ -162,10 +163,27 @@ class AgentService:
                 return AgentResponse(
                     response_type="trade_confirmation",
                     message=f"I found {symbol} at ${price}. Confirm buy?",
-                    trade_payload={"symbol": symbol, "amount": amount, "price": price}
+                    trade_payload={"symbol": symbol, "amount": amount, "price": price, "side": "buy"}
                 )
             except Exception as parse_error:
                 print(f"Parsing Tag Error: {parse_error}")
+                pass
+        
+        if "<<CONFIRM_SELL:" in raw_output:
+            try:
+                clean = raw_output.split("<<CONFIRM_SELL:")[1].split(">>")[0]
+                parts = clean.split(",")
+                symbol = parts[0].strip().upper()
+                amount = int(parts[1].strip())
+                price = float(parts[2].strip().replace("$", "").replace(",", ""))
+                
+                return AgentResponse(
+                    response_type="trade_confirmation",
+                    message=f"I found {symbol} at ${price}. Confirm SELL?",
+                    # הוספתי side: sell
+                    trade_payload={"symbol": symbol, "amount": amount, "price": price, "side": "sell"}
+                )
+            except:
                 pass
 
         if "I will proceed" in raw_output or "The price is" in raw_output:

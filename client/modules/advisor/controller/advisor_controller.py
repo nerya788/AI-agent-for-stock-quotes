@@ -17,7 +17,7 @@ class AdvisorController:
         self.setup_connections()
 
     def setup_connections(self):
-        # שינוי 1: חיבור לסיגנל של הצ'אט במקום לכפתור "נתח"
+        # חיבור לסיגנל של הצ'אט
         self.view.send_message.connect(self.handle_user_message)
 
     def handle_user_message(self, text):
@@ -38,15 +38,18 @@ class AdvisorController:
     # --- פונקציית רקע (Worker) ---
     def _chat_task(self, text, user_id):
         """שולח את ההודעה לשרת ומחזיר אובייקט AdvisorModel"""
-        # כתובת ה-API של הסוכן (וודא שזה תואם לשרת שלך)
+        # כתובת ה-API של הסוכן
         url = "http://127.0.0.1:8000/stocks/agent/chat"
         
         try:
-            # שליחת בקשה לשרת עם ה-ID של המשתמש (בשביל הזיכרון)
-            response = requests.post(url, json={"message": text, "user_id": user_id}, timeout=120)
+            # שליחת בקשה לשרת
+            response = requests.post(
+                url, 
+                json={"message": text, "user_id": user_id}, 
+                timeout=120
+            )
             
             if response.status_code == 200:
-                # המרה ל-AdvisorModel החדש שיצרנו (עם response_type)
                 return AdvisorModel.from_json(response.json())
             else:
                 raise Exception(f"Server returned {response.status_code}")
@@ -75,18 +78,21 @@ class AdvisorController:
             self._handle_trade_confirmation(advisor_model.trade_payload)
 
     def _handle_trade_confirmation(self, payload):
-        """לוגיקה להקפצת חלון אישור וביצוע קנייה"""
+        """לוגיקה חכמה לפתיחת חלון קנייה או מכירה"""
         if not payload: return
 
         symbol = payload.get('symbol')
         amount = payload.get('amount')
         price = payload.get('price')
+        side = payload.get('side', 'buy') # ברירת מחדל לקנייה
 
-        # הקפצת חלונית אישור למשתמש (Human-in-the-loop)
+        # ניסוח ההודעה למשתמש
+        action_verb = "Buying" if side == "buy" else "Selling"
+
         reply = QMessageBox.question(
             self.view, 
             "AI Trade Assistant", 
-            f"The Agent suggests buying:\n\n"
+            f"The Agent suggests {action_verb}:\n\n"
             f"📈 Stock: {symbol}\n"
             f"🔢 Amount: {amount}\n"
             f"💲 Est. Price: ${price}\n\n"
@@ -95,11 +101,43 @@ class AdvisorController:
         )
 
         if reply == QMessageBox.Yes:
-            # מעבר ל-TradeController הקיים שלך כדי לבצע את הקנייה האמיתית
-            # אנו מניחים שיש גישה ל-portfolio_module דרך ה-app
-            if hasattr(self.app.portfolio_module, 'trade_controller'):
-                self.app.portfolio_module.trade_controller.open_purchase_window(symbol, price)
-                # (אופציונלי) אפשר גם להזין את הכמות אוטומטית אם תוסיף מתודה כזו ב-TradeView
+            # בדיקת תקינות לפני גישה למודול
+            if not hasattr(self.app, 'portfolio_module') or not hasattr(self.app.portfolio_module, 'trade_controller'):
+                self.view.add_message("System", "Error: Portfolio module not initialized.", Qt.AlignLeft)
+                return
+
+            portfolio = self.app.portfolio_module
+            
+            if side == "sell":
+                # --- לוגיקה למכירה: חיפוש המניה בתיק ---
+                found_holding = None
+                
+                # אנחנו עוברים על המניות בתיק כדי למצוא את המניה המבוקשת
+                for eid, data in portfolio.stocks_data.items():
+                    if data['symbol'] == symbol:
+                        found_holding = data
+                        found_holding['event_id'] = eid # שומרים את ה-ID
+                        break
+                
+                if found_holding:
+                    # פתיחת חלון המכירה עם הנתונים האמיתיים מהתיק
+                    portfolio.trade_controller.open_sale_window(
+                        symbol=found_holding['symbol'],
+                        current_price=price,
+                        available_qty=found_holding['amount'],
+                        buy_price=found_holding['buy_price'],
+                        event_id=found_holding['event_id']
+                    )
+                    # עדכון הכמות בחלון
+                    portfolio.trade_controller.trade_view.amount_spin.setValue(amount)
+                else:
+                    QMessageBox.warning(self.view, "Error", f"You don't own any shares of {symbol} to sell.")
+
+            else:
+                # --- לוגיקה לקנייה (רגיל) ---
+                portfolio.trade_controller.open_purchase_window(symbol, price)
+                # עדכון הכמות בחלון
+                portfolio.trade_controller.trade_view.amount_spin.setValue(amount)
 
     def on_error(self, error_msg):
         self.view.add_message("System", f"Error: {error_msg}", Qt.AlignLeft)
