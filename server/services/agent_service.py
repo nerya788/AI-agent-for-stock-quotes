@@ -8,7 +8,7 @@ from server.models.agent_dto import AgentResponse
 from langchain_groq import ChatGroq
 
 USE_CLOUD = True
-GROQ_API_KEY = "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" \
+GROQ_API_KEY = "" \
 
 class AgentService:
     def __init__(self):
