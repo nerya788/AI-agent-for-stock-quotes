@@ -1,18 +1,35 @@
+import os
 from langchain_ollama import OllamaLLM
 from langchain.agents import initialize_agent, AgentType
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
 from server.services.agent_tools import get_stock_price, check_my_portfolio
 from server.models.agent_dto import AgentResponse
+from langchain_groq import ChatGroq
+
+USE_CLOUD = True
+GROQ_API_KEY = "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" \
 
 class AgentService:
     def __init__(self):
         print("🤖 Initializing AgentService with model: llama3.2:1b")
         
         # model="llama3.2:1b" - ודא שזה השם המדויק ב-Ollama שלך
-        self.llm = OllamaLLM(model="llama3.2:1b", temperature=0)
         self.tools = [get_stock_price, check_my_portfolio]
         self.user_memories = {}
+        # לוגיקת בחירת מודל
+        if USE_CLOUD and ChatGroq:
+            print("🚀 Initializing Agent with CLOUD model (Groq Llama 3-8b)")
+            self.llm = ChatGroq(
+                temperature=0, 
+                model_name="llama-3.1-8b-instant", 
+                api_key=GROQ_API_KEY
+            )
+        else:
+            print("🐌 Initializing Agent with LOCAL model (Ollama Llama 3)")
+            # כאן אנחנו משתמשים בשם הגנרי 'llama3' שיתאים לחברים שלך
+            # אצלך זה יכשל אם אין לך llama3, אבל זה בסדר כי אתה ב-USE_CLOUD=True
+            self.llm = OllamaLLM(model="llama3", temperature=0)
 
         # --- 1. PREFIX: הגדרת האישיות (לפני הכלים) ---
         self.prefix = """You are a professional financial advisor assistant. 
@@ -26,13 +43,6 @@ class AgentService:
         Action: the action to take, should be one of [{tool_names}]
         Action Input: the input to the action
         Observation: the result of the action
-
-        IMPORTANT rules for Llama 3:
-        1. Do NOT write "Action: tool_name(arg)". This is WRONG.
-        2. Write "Action: tool_name" on one line, and "Action Input: arg" on the next line.
-        3. Do NOT use quotes or brackets in the Action name.
-        4. If the user asks for a general plan, your Final Answer MUST be: <<OPEN_INVESTMENT_FORM>>
-        5. If you confirm a buy, your Final Answer MUST be: <<CONFIRM_BUY:SYMBOL,AMOUNT,PRICE>>
 
         When you have a response for the Human, or if you do not need to use a tool, you MUST use the format:
         Thought: Do I need to use a tool? No
@@ -56,19 +66,8 @@ class AgentService:
             )
         return self.user_memories[user_id]
 
-    def _handle_parsing_error(self, error) -> str:
-        """פונקציית עזר: אם המודל מתבלבל, אנחנו עוזרים לו"""
-        response = str(error)
-        # אם המודל כתב בטעות קוד פייתון, ננחה אותו לתקן
-        if "Could not parse LLM output" in response or "Missing 'Action Input'" in response:
-            return "Observation: You used the wrong format. Do not use parentheses '()'. Write 'Action: [tool_name]' and then 'Action Input: [value]' on a new line."
-        return f"Observation: Error: {response}"
-
     def _get_executor_for_user(self, user_id: str):
         memory = self._get_memory_for_user(user_id)
-        
-        # יצירת ה-Prompt המותאם
-        prompt = PromptTemplate.from_template(self.suffix)
         
         # שימוש ב-initialize_agent (הכי יציב לגרסה הזאת)
         return initialize_agent(
@@ -86,45 +85,90 @@ class AgentService:
             }
         )
 
+    def _handle_parsing_error(self, error) -> str:
+        """
+        מנגנון הצלה חכם:
+        אם המודל נתן את התשובה הנכונה אבל הפורמט שבר את LangChain,
+        אנחנו מחלצים את התשובה מתוך הודעת השגיאה ומחזירים אותה כהצלחה.
+        """
+        response = str(error)
+        
+        # 1. התיקון הקריטי: אם התגית נמצאת בתוך השגיאה - הצלנו את המצב!
+        if "<<CONFIRM_BUY:" in response:
+            # אנחנו מחזירים את התגית עצמה, וכך ה-process_request יתפוס אותה
+            raise ValueError(f"###STOP_CHAIN_SUCCESS###{response}")
+                 
+        if "<<OPEN_INVESTMENT_FORM>>" in response:
+            raise ValueError("###STOP_CHAIN_FORM###")
+        
+        # 2. אם זו סתם שגיאת פורמט בלי תשובה, ננזוף במודל
+        if "Could not parse LLM output" in response:
+            return "Observation: Invalid Format. Remember to use 'Action:' and 'Action Input:' on separate lines."
+        
+        return f"Observation: Invalid Format. You provided: {str(error)[:50]}... Remember to use 'Action:' and 'Action Input:' on separate lines."
+
     def process_request(self, user_input: str, user_id: str) -> AgentResponse:
         executor = self._get_executor_for_user(user_id)
         
-        # --- התיקון: הזרקת ה-ID לתוך הקלט ---
-        # אנחנו אומרים לסוכן במפורש: "הנה ה-ID של המשתמש, תשתמש בו!"
         enhanced_input = (
-            f"User Request: {user_input}\n\n"
-            "CONTEXT & RULES:\n"
-            f"1. My User ID is: {user_id} (Use this ONLY for 'check_my_portfolio').\n"
-            "2. For 'get_stock_price', extract the symbol from my request (e.g. Apple -> AAPL, Google -> GOOGL).\n"
-            "3. Do NOT use the User ID as a stock symbol."
+            f"User Request: {user_input}\n"
+            f"Context: My User ID is {user_id}.\n"
+            "CRITICAL INSTRUCTIONS:\n"
+            "1. Step 1: Get the stock price.\n"
+            "2. Step 2: IF price is found -> STOP EVERYTHING ELSE.\n"
+            "3. Step 3: Output ONLY the confirmation tag.\n"
+            "   - Format: <<CONFIRM_BUY:SYMBOL,AMOUNT,PRICE>>\n"
+            "   - FORBIDDEN: Do NOT write 'I will proceed'. Do NOT write 'The price is...'.\n"
+            "   - FORBIDDEN: Do NOT ask for confirmation text. JUST OUTPUT THE TAG.\n"
+            "   - Example Final Answer: <<CONFIRM_BUY:AAPL,2,150.5>>"
         )
         
         try:
+            # ניסיון להריץ את הסוכן
             result = executor.invoke({"input": enhanced_input})
             raw_output = result["output"]
             
-            # --- Parsing ---
-            if "<<OPEN_INVESTMENT_FORM>>" in raw_output:
-                return AgentResponse(response_type="form", message="Opening form...")
-            
-            if "<<CONFIRM_BUY:" in raw_output:
-                try:
-                    clean = raw_output.split("<<CONFIRM_BUY:")[1].split(">>")[0]
-                    parts = clean.split(",")
-                    return AgentResponse(
-                        response_type="trade_confirmation",
-                        message=f"Confirm buy: {parts[1]} shares of {parts[0]}",
-                        trade_payload={"symbol": parts[0], "amount": int(parts[1]), "price": float(parts[2])}
-                    )
-                except:
-                    pass
-
-            return AgentResponse(response_type="chat", message=raw_output)
-
+        except ValueError as e:
+            # --- כאן אנחנו תופסים את ה-EJECT שלנו ---
+            error_str = str(e)
+            if "###STOP_CHAIN_SUCCESS###" in error_str:
+                # חילוץ התשובה מתוך ה"שגיאה"
+                raw_output = error_str.split("###STOP_CHAIN_SUCCESS###")[1]
+            elif "###STOP_CHAIN_FORM###" in error_str:
+                return AgentResponse(response_type="form", message="Opening investment form...")
+            else:
+                # זו שגיאה אמיתית, לא ה-Eject שלנו
+                print(f"Agent Error: {e}")
+                return AgentResponse(response_type="chat", message="I found the price but got stuck. Please try again.")
         except Exception as e:
-            print(f"Agent Error: {e}")
-            # במקרה של שגיאת UUID (כמו שראית), נחזיר הודעה יפה
-            if "invalid input syntax for type uuid" in str(e):
-                return AgentResponse(response_type="chat", message="I tried to check your portfolio but got confused with the User ID. Please try again.")
-            
-            return AgentResponse(response_type="chat", message="I'm having trouble connecting to my brain right now. Please try again.")
+            print(f"Critical Error: {e}")
+            return AgentResponse(response_type="chat", message="System error. Please try again.")
+
+        # --- Parsing של התשובה (בין אם הגיעה רגיל או דרך ה-Eject) ---
+        if "<<OPEN_INVESTMENT_FORM>>" in raw_output:
+            return AgentResponse(response_type="form", message="Opening investment form...")
+        
+        if "<<CONFIRM_BUY:" in raw_output:
+            try:
+                # חילוץ אגרסיבי גם אם יש רעש מסביב
+                clean = raw_output.split("<<CONFIRM_BUY:")[1].split(">>")[0]
+                parts = clean.split(",")
+                
+                symbol = parts[0].strip().upper()
+                amount = int(parts[1].strip())
+                price_str = parts[2].strip().replace("$", "").replace(",", "")
+                price = float(price_str)
+                
+                return AgentResponse(
+                    response_type="trade_confirmation",
+                    message=f"I found {symbol} at ${price}. Confirm buy?",
+                    trade_payload={"symbol": symbol, "amount": amount, "price": price}
+                )
+            except Exception as parse_error:
+                print(f"Parsing Tag Error: {parse_error}")
+                pass
+
+        if "I will proceed" in raw_output or "The price is" in raw_output:
+             return AgentResponse(response_type="chat", message="I found the price. Try saying just 'Buy' to trigger the popup.")
+
+        return AgentResponse(response_type="chat", message=raw_output)
