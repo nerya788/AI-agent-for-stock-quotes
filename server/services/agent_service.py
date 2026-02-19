@@ -197,7 +197,7 @@ class AgentService:
                 
                 return AgentResponse(
                     response_type="trade_confirmation",
-                    message=f"I found {symbol} at ${price}. Confirm SELL?",
+                    message=f"I found {symbol} at ${price}. Confirm sell?",
                     # הוספתי side: sell
                     trade_payload={"symbol": symbol, "amount": amount, "price": price, "side": "sell"}
                 )

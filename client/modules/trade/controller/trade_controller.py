@@ -29,17 +29,19 @@ class TradeController(QDialog):
                 cards = response.get("cards", [])
                 self.trade_view.load_saved_cards(cards)
 
-    def open_purchase_window(self, symbol, price):
+    def open_purchase_window(self, symbol, price, initial_amount=1):
         self.setWindowTitle(f"Buy {symbol}")
         self.trade_view.set_mode("buy")
         self.trade_view.set_stock_data(symbol, price)
+        self.trade_view.amount_spin.setValue(initial_amount)
         self._load_user_context()
         self.exec()
 
-    def open_sale_window(self, symbol, current_price, available_qty, buy_price, event_id):
+    def open_sale_window(self, symbol, current_price, available_qty, buy_price, event_id, initial_amount=1):
         self.setWindowTitle(f"Sell {symbol}")
         self.trade_view.set_mode("sell")
         self.trade_view.set_stock_data(symbol, current_price, available_qty, buy_price, event_id)
+        self.trade_view.amount_spin.setValue(initial_amount)
         self._load_user_context()
         self.exec()
 

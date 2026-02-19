@@ -126,18 +126,15 @@ class AdvisorController:
                         current_price=price,
                         available_qty=found_holding['amount'],
                         buy_price=found_holding['buy_price'],
-                        event_id=found_holding['event_id']
+                        event_id=found_holding['event_id'],
+                        initial_amount=amount
                     )
-                    # עדכון הכמות בחלון
-                    portfolio.trade_controller.trade_view.amount_spin.setValue(amount)
                 else:
                     QMessageBox.warning(self.view, "Error", f"You don't own any shares of {symbol} to sell.")
 
             else:
                 # --- לוגיקה לקנייה (רגיל) ---
-                portfolio.trade_controller.open_purchase_window(symbol, price)
-                # עדכון הכמות בחלון
-                portfolio.trade_controller.trade_view.amount_spin.setValue(amount)
+                portfolio.trade_controller.open_purchase_window(symbol, price, initial_amount=amount)
 
     def on_error(self, error_msg):
         self.view.add_message("System", f"Error: {error_msg}", Qt.AlignLeft)
