@@ -37,20 +37,27 @@ class SaleRequest(BaseModel):
 async def buy_stock(req: PurchaseRequest):
     print(f"💰 API: Processing buy request for {req.symbol}...")
     try:
-        # 1. שמירת כרטיס (אפשר להעביר גם את זה ל-Repo בעתיד, אבל כרגע זה בסדר כאן)
+        # 1. שמירת כרטיס בצורה בטוחה (ללא ON CONFLICT)
         if req.save_card:
-            dal.table("saved_cards").upsert(
-                {
-                    "user_id": req.user_id,
-                    "card_holder": req.card_holder,
-                    "card_number": req.card_number,
-                    "expiration": req.expiration,
-                    "cvv": req.cvv,
-                },
-                on_conflict="user_id",
-            ).execute()
+            # בודקים אם למשתמש כבר יש כרטיס שמור
+            existing_card = dal.table("saved_cards").select("*").eq("user_id", req.user_id).execute()
+            
+            card_data = {
+                "user_id": req.user_id,
+                "card_holder": req.card_holder,
+                "card_number": req.card_number,
+                "expiration": req.expiration,
+                "cvv": req.cvv,
+            }
+            
+            if existing_card.data and len(existing_card.data) > 0:
+                # מעדכנים כרטיס קיים
+                dal.table("saved_cards").update(card_data).eq("user_id", req.user_id).execute()
+            else:
+                # שומרים כרטיס חדש
+                dal.table("saved_cards").insert(card_data).execute()
 
-        # 2. ביצוע הקנייה דרך ה-Repository (הכל קורה שם!)
+        # 2. ביצוע הקנייה דרך ה-Repository
         stock_repo.buy_stock(
             symbol=req.symbol,
             price=req.price,
@@ -65,8 +72,8 @@ async def buy_stock(req: PurchaseRequest):
         }
 
     except Exception as e:
+        print(f"❌ API Buy Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/sell")
 async def sell_stock(req: SaleRequest):

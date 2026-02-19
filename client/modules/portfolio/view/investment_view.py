@@ -83,5 +83,24 @@ class InvestmentView(QWidget):
         """)
         result_container.addWidget(self.ai_response_box)
         
+        self.execute_btn = QPushButton("🛒 Execute Plan (Review Basket)")
+        self.execute_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #a6e3a1; 
+                color: #11111b; 
+                padding: 15px; 
+                font-size: 16px; 
+                font-weight: bold; 
+                border-radius: 15px; 
+                margin-top: 10px;
+            }
+            QPushButton:hover {
+                background-color: #94e289;
+            }
+        """)
+        self.execute_btn.setCursor(Qt.PointingHandCursor)
+        self.execute_btn.hide() # מוסתר בהתחלה
+        result_container.addWidget(self.execute_btn)
+        
         main_layout.addLayout(result_container, 1)
         self.setLayout(main_layout)

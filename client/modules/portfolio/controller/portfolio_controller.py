@@ -16,6 +16,8 @@ from client.modules.portfolio.view.investment_view import InvestmentView
 from client.modules.trade.controller.trade_controller import TradeController
 from client.core.api_client import APIClient
 from client.core.worker_thread import WorkerThread  # <--- הוספנו את המנוע!
+from client.modules.trade.view.basket_view import BasketView
+from client.modules.trade.controller.basket_controller import BasketController
 
 
 # from client.modules.portfolio.view.stock_search_dialog import StockSearchDialog
@@ -58,6 +60,9 @@ class PortfolioController(QWidget):
         
         # כפתור חזרה ל-AI Advisor
         self.investment_view.back_btn.clicked.connect(self.back_to_advisor)
+        
+        # כפתור ביצוע ההמלצה (פתיחת עגלת קניות)
+        self.investment_view.execute_btn.clicked.connect(self.execute_basket)
 
         # חיבור כפתור ההתנתקות
         if hasattr(self.dashboard_view, "logout_btn"):
@@ -172,10 +177,29 @@ class PortfolioController(QWidget):
         self.ai_worker.start()
 
     def on_ai_success(self, recommendation):
+        # בדיקה בטוחה: נסתיר את סמל הטעינה רק אם הוא באמת קיים ב-UI
+        if hasattr(self.investment_view, 'loading_label'):
+            self.investment_view.loading_label.hide()
+            
+        if isinstance(recommendation, dict):
+            display_text = recommendation.get("plan_text", "Could not load plan text.")
+            self.investment_view.ai_response_box.setText(display_text)
+            self.current_basket = recommendation.get("basket", [])
+            
+            if self.current_basket:
+                self.investment_view.execute_btn.show()
+            else:
+                self.investment_view.execute_btn.hide() # נסתיר אם העגלה ריקה בגלל שגיאת AI
+            
+        else:
+            self.investment_view.ai_response_box.setText(str(recommendation))
+            self.current_basket = []
+            self.investment_view.execute_btn.hide()
+
+        # --- התיקון הקריטי: קריאה ל-submit_btn במקום generate_btn ---
         self.investment_view.submit_btn.setEnabled(True)
         self.investment_view.submit_btn.setText("Generate AI Recommendation 🚀")
-        self.investment_view.ai_response_box.setText(recommendation)
-
+    
     def on_ai_error(self, error_msg):
         self.investment_view.submit_btn.setEnabled(True)
         self.investment_view.submit_btn.setText("Generate AI Recommendation 🚀")
@@ -292,3 +316,27 @@ class PortfolioController(QWidget):
         """חזרה למסך היועץ לאחר סיום/ביטול טופס ההשקעה"""
         if hasattr(self.app, "navigate_to_advisor"):
             self.app.navigate_to_advisor()
+
+    def execute_basket(self):
+        """פותח את חלון עגלת הקניות במקום לפתוח חלונות מסחר נפרדים"""
+        if not hasattr(self, 'current_basket') or not self.current_basket:
+            return
+            
+        try:
+            total_investment = float(self.investment_view.amount_input.text())
+        except ValueError:
+            total_investment = 1000.0
+            
+        print("🛒 Opening Shopping Basket View...")
+        
+        # יצירת חלון העגלה והקונטרולר שלה
+        self.basket_view = BasketView()
+        self.basket_controller = BasketController(
+            app=self.app, 
+            view=self.basket_view, 
+            basket_data=self.current_basket, 
+            total_budget=total_investment
+        )
+        
+        # הצגת החלון (exec עוצר את הרקע עד שהמשתמש מסיים לאשר את העגלה)
+        self.basket_view.exec()
