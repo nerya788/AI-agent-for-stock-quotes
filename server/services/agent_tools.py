@@ -65,3 +65,13 @@ def check_my_portfolio(user_id: str) -> str:
     for s in res.data:
         summary += f"- {s['symbol']}: {s['amount']} shares (Avg Buy Price: ${s['price']})\n"
     return summary
+
+@tool
+def identify_intent(user_input: str) -> str:
+    """This is a helper tool to identify user intent. Not meant to be called directly by the agent."""
+    text = user_input.lower()
+    if any(word in text for word in ["buy", "sell", "trade"]):
+        return "TRADING"
+    if any(word in text for word in ["plan", "offer", "advise", "suggestion", "recommend", "advice"]):
+        return "INVESTMENT_ADVICE"
+    return "CHAT"

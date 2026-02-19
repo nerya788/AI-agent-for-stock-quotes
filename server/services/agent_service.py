@@ -4,11 +4,11 @@ from langchain_ollama import OllamaLLM
 from langchain.agents import initialize_agent, AgentType
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
-from server.services.agent_tools import get_stock_price, check_my_portfolio
+from server.services.agent_tools import get_stock_price, identify_intent
 from server.models.agent_dto import AgentResponse
 from langchain_groq import ChatGroq
 
-USE_CLOUD = True
+USE_CLOUD = False
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 class AgentService:
@@ -16,7 +16,7 @@ class AgentService:
         print("🤖 Initializing AgentService with model: llama3.2:1b")
         
         # model="llama3.2:1b" - ודא שזה השם המדויק ב-Ollama שלך
-        self.tools = [get_stock_price, check_my_portfolio]
+        self.tools = [get_stock_price, identify_intent]
         self.user_memories = {}
         # לוגיקת בחירת מודל
         if USE_CLOUD and ChatGroq:
@@ -101,6 +101,11 @@ class AgentService:
         if "<<OPEN_INVESTMENT_FORM>>" in response:
             raise ValueError("###STOP_CHAIN_FORM###")
         
+        if "Final Answer:" in response:
+            clean_text = response.split("Final Answer:")[-1].strip().strip("`")
+            # זורקים שגיאה יזומה כדי לצאת מהלופ של LangChain
+            raise ValueError(f"###STOP_CHAIN_CHAT###{clean_text}")
+        
         # 2. אם זו סתם שגיאת פורמט בלי תשובה, ננזוף במודל
         if "Could not parse LLM output" in response:
             return "Observation: Invalid Format. Remember to use 'Action:' and 'Action Input:' on separate lines."
@@ -113,15 +118,24 @@ class AgentService:
         enhanced_input = (
             f"User Request: {user_input}\n"
             f"Context: My User ID is {user_id}.\n"
-            "STRICT PROTOCOL FOR BUY/SELL:\n"
-            "1. Step 1: Use 'get_stock_price' to get the current value.\n"
-            "2. RESTRICTION: Do NOT use 'check_my_portfolio' if the user asks to Buy or Sell. Just execute.\n"
-            "3. Step 2: Once price is found -> STOP USING TOOLS IMMEDIATELY.\n"
-            "4. Step 3: Output ONLY the confirmation tag based on intent:\n"
+            "1. IDENTIFY INTENT:\n"
+            "   Identify one of the two intentions, when you identify one of them you will only execute the commands that correspond to it"
+            "   - 'Buy/Sell/Trade' -> TRADING.\n"
+            "   - 'Plan/Offer/Advise/Suggestion/Recommend/Advice' -> INVESTMENT ADVICE.\n"
+            "\n"
+            "   --- IF TRADING ---\n"
+            "2. Step 1: Use 'get_stock_price' to get the current value.\n"
+            "3. RESTRICTION: if the user asks to Buy or Sell. Just execute.\n"
+            "4. Step 2: Once price is found -> STOP USING TOOLS IMMEDIATELY.\n"
+            "5. Step 3: Output ONLY the confirmation tag based on intent:\n"
             "   - If BUYing  -> Final Answer: <<CONFIRM_BUY:SYMBOL,AMOUNT,PRICE>>\n"
             "   - If SELLing -> Final Answer: <<CONFIRM_SELL:SYMBOL,AMOUNT,PRICE>>\n"
             "   - Example: <<CONFIRM_BUY:AAPL,2,150.5>>\n"
             "   - Example: <<CONFIRM_SELL:TSLA,1,700>>\n"
+            "\n"
+            "2.   --- IF INVESTMENT ADVICE ---\n"
+            "3.   - DO NOT start a conversation. DO NOT ask for details..\n"
+            "4.   - Example: <<OPEN_INVESTMENT_FORM>>\n"
         )
         
         try:
@@ -137,6 +151,10 @@ class AgentService:
                 raw_output = error_str.split("###STOP_CHAIN_SUCCESS###")[1]
             elif "###STOP_CHAIN_FORM###" in error_str:
                 return AgentResponse(response_type="form", message="Opening investment form...")
+            elif "###STOP_CHAIN_CHAT###" in error_str:
+                # מצאנו את הטקסט החופשי - שולחים חזרה למשתמש!
+                chat_msg = error_str.split("###STOP_CHAIN_CHAT###")[1]
+                return AgentResponse(response_type="chat", message=chat_msg)
             else:
                 # זו שגיאה אמיתית, לא ה-Eject שלנו
                 print(f"Agent Error: {e}")
