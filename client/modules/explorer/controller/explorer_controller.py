@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QMessageBox
 from client.modules.explorer.view.explorer_view import ExplorerView
 from client.core.api_client import APIClient
 from client.core.worker_thread import WorkerThread
+from PySide6.QtCore import Qt
 import requests
 
 class ExplorerController:
@@ -123,9 +124,22 @@ class ExplorerController:
             table.setItem(row, 2, QTableWidgetItem(f"${stock.get('price', 0)}"))
 
             btn = QPushButton("View")
-            btn.setStyleSheet("background-color: #89b4fa; color: #1e1e2e;")
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #89b4fa; 
+                    color: #1e1e2e;
+                    font-weight: bold;
+                    font-size: 13px;
+                    padding: 4px 12px;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #b4befe;
+                }
+            """)
             btn.clicked.connect(lambda ch, s=symbol: self.search_stock_from_browse(s, dialog))
             table.setCellWidget(row, 3, btn)
+            btn.setCursor(Qt.PointingHandCursor)
 
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         layout.addWidget(table)
