@@ -138,3 +138,14 @@ class AdvisorController:
 
     def on_error(self, error_msg):
         self.view.add_message("System", f"Error: {error_msg}", Qt.AlignLeft)
+    
+    def setup_connections(self):
+        # חיבור לסיגנל של הצ'אט
+        self.view.send_message.connect(self.handle_user_message)
+        # הוספנו: חיבור כפתור החזרה
+        self.view.back_btn.clicked.connect(self.go_back_to_dashboard)
+
+    def go_back_to_dashboard(self):
+        """מעבר חזרה לדשבורד"""
+        if hasattr(self.app, 'navigate_to_portfolio'):
+            self.app.navigate_to_portfolio()

@@ -51,8 +51,9 @@ class InvestmentView(QWidget):
         form_layout.addWidget(self.submit_btn)
         
         # כפתור חזרה
-        self.back_btn = QPushButton("← Back to Dashboard")
+        self.back_btn = QPushButton("← Back to AI Advisor")
         self.back_btn.setStyleSheet("background-color: #89b4fa; color: #11111b; padding: 10px; font-size: 14px;")
+        self.back_btn.setCursor(Qt.PointingHandCursor)
         form_layout.addWidget(self.back_btn)
         
         form_layout.addStretch()

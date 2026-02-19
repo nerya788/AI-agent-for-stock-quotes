@@ -14,11 +14,21 @@ class AdvisorView(QWidget):
         layout = QVBoxLayout()
         
         # כותרת
+        top_layout = QHBoxLayout()
+
+        self.back_btn = QPushButton("← Back to Dashboard")
+        self.back_btn.setStyleSheet("background-color: #45475a; color: white; padding: 8px 15px; border-radius: 5px; font-weight: bold;")
+        self.back_btn.setCursor(Qt.PointingHandCursor)
+
         header = QLabel("AI Financial Advisor 🤖")
         header.setStyleSheet("font-size: 24px; font-weight: bold; color: #cba6f7;")
         header.setAlignment(Qt.AlignCenter)
-        layout.addWidget(header)
 
+        top_layout.addWidget(self.back_btn)
+        top_layout.addWidget(header, 1)
+
+        layout.addLayout(top_layout)
+        
         # אזור ההיסטוריה של הצ'אט (במקום סתם תיבת טקסט)
         self.chat_history = QListWidget()
         self.chat_history.setStyleSheet("""

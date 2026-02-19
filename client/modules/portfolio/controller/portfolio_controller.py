@@ -56,8 +56,8 @@ class PortfolioController(QWidget):
         # חיבור הכפתור של ה-AI ליצירת המלצה
         self.investment_view.submit_btn.clicked.connect(self.handle_ai_recommendation)
         
-        # כפתור חזרה לדשבורד
-        self.investment_view.back_btn.clicked.connect(self.show_dashboard)
+        # כפתור חזרה ל-AI Advisor
+        self.investment_view.back_btn.clicked.connect(self.back_to_advisor)
 
         # חיבור כפתור ההתנתקות
         if hasattr(self.dashboard_view, "logout_btn"):
@@ -287,3 +287,8 @@ class PortfolioController(QWidget):
 
     def add_stock_entry(self, stock):
         self.load_watchlist()
+    
+    def back_to_advisor(self):
+        """חזרה למסך היועץ לאחר סיום/ביטול טופס ההשקעה"""
+        if hasattr(self.app, "navigate_to_advisor"):
+            self.app.navigate_to_advisor()

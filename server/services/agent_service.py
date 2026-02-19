@@ -8,7 +8,7 @@ from server.services.agent_tools import get_stock_price, identify_intent
 from server.models.agent_dto import AgentResponse
 from langchain_groq import ChatGroq
 
-USE_CLOUD = False
+USE_CLOUD = True
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 class AgentService:
