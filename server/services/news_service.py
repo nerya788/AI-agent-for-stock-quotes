@@ -6,10 +6,10 @@ import httpx
 
 
 class NewsService:
-    """שירות למשיכת חדשות פיננסיות מ-Finnhub.
+    """Service for fetching financial news from Finnhub.
 
-    מסתמך על FINNHUB_API_KEY שמוגדר בקובץ .env.
-    מחזיר חדשות בפורמט אחיד שמתאים ל-AIService.rank_news_for_stock.
+    Relies on FINNHUB_API_KEY being set in the .env file.
+    Returns news in a normalized format compatible with AIService.rank_news_for_stock.
     """
 
     BASE_URL = "https://finnhub.io/api/v1"
@@ -17,12 +17,14 @@ class NewsService:
     def __init__(self) -> None:
         self.api_key = os.getenv("FINNHUB_API_KEY")
         if not self.api_key:
-            print("⚠️ FINNHUB_API_KEY not set – NewsService will operate in empty/mock mode")
+            print(
+                "⚠️ FINNHUB_API_KEY not set – NewsService will operate in empty/mock mode"
+            )
 
     def get_company_news(self, symbol: str, days_back: int = 10) -> List[Dict]:
-        """שליפת חדשות עבור מניה מסוימת אחרונה X ימים (ברירת מחדל 10 ימים).
+        """Fetch company news for the last X days (default: 10).
 
-        מחזיר רשימת מילונים עם המפתחות:
+        Returns a list of dicts with keys:
         - title
         - summary
         - url
@@ -45,7 +47,7 @@ class NewsService:
         try:
             resp = httpx.get(url, params=params, timeout=10)
             if resp.status_code != 200:
-                # לוג מפורט לעזרת דיבוג (למשתמש)
+                # Detailed log to help debugging
                 print(
                     f"❌ Finnhub company-news error for {symbol}: "
                     f"status={resp.status_code}, body={resp.text[:200]}"

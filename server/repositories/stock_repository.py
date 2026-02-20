@@ -3,21 +3,21 @@ from server.dal.supabase_client import SupabaseDAL
 
 class StockRepository:
     def __init__(self):
-        # אך ורק self.dal!
+        # Use only self.dal!
         self.dal = SupabaseDAL.get_instance()
 
     def record_event(self, symbol: str, event_type: str, payload: dict, user_id: str):
-            """
-            שומר אירוע בטבלת ההיסטוריה - לוגיקה מרוכזת ב-Repo
-            """
-            event_data = {
-                "user_id": user_id,
-                "symbol": symbol.upper(),
-                "event_type": event_type,
-                "payload": payload,
-                # ה-created_at נוצר אוטומטית ב-DB או כאן
-            }
-            return self.dal.table("stock_events").insert(event_data).execute()
+        """
+        Save an event into the history table (logic centralized in the Repo).
+        """
+        event_data = {
+            "user_id": user_id,
+            "symbol": symbol.upper(),
+            "event_type": event_type,
+            "payload": payload,
+            # `created_at` is set automatically in the DB (or could be set here)
+        }
+        return self.dal.table("stock_events").insert(event_data).execute()
 
     def get_watchlist(self, user_id: str = None):
         query = self.dal.table("stocks_watchlist").select("*")
@@ -67,11 +67,11 @@ class StockRepository:
         user_id: str = None,
     ):
         """
-        ביצוע קנייה חכמה: חישוב ממוצע משוקלל + תיעוד
+        Smart buy execution: weighted average calculation + event logging.
         """
         print(f"🔄 Starting SMART buy_stock for {symbol}...")
 
-        # 1. תיעוד האירוע
+        # 1. Log the event
         self.record_event(
             symbol,
             "STOCK_PURCHASED",
@@ -86,7 +86,7 @@ class StockRepository:
             user_id=user_id,
         )
 
-        # 2. חישוב הממוצע המשוקלל
+        # 2. Compute the weighted average
         try:
             existing_row = (
                 self.dal.table("stocks_watchlist")
@@ -104,7 +104,7 @@ class StockRepository:
                 current_amount = current_data.get("amount", 0)
                 current_avg_price = current_data.get("price", 0)
 
-                # חישוב משוקלל
+                # Weighted calculation
                 if current_amount + amount_to_buy > 0:
                     total_cost = (current_amount * current_avg_price) + (
                         amount_to_buy * price
@@ -112,7 +112,7 @@ class StockRepository:
                     new_total_amount = current_amount + amount_to_buy
                     new_avg_price = total_cost / new_total_amount
 
-            # 3. שמירה
+            # 3. Persist
             view_data = {
                 "user_id": user_id,
                 "symbol": symbol,
@@ -132,43 +132,60 @@ class StockRepository:
             print(f"❌ Error in buy_stock: {e}")
             raise e
 
-    def sell_stock(self, symbol: str, amount_to_sell: int, current_price: float, user_id: str = None):
+    def sell_stock(
+        self,
+        symbol: str,
+        amount_to_sell: int,
+        current_price: float,
+        user_id: str = None,
+    ):
         """
-        לוגיקת מכירה מרוכזת: עדכון כמות או מחיקה במידה ומכרנו הכל.
+        Centralized sell logic: update quantity or delete if everything was sold.
         """
         print(f"📉 Repository: Processing sale for {symbol}...")
-        
+
         try:
-            # 1. בדיקה מה המצב הנוכחי ב-Watchlist
-            watchlist_res = self.dal.table("stocks_watchlist")\
-                .select("*")\
-                .eq("symbol", symbol)\
-                .eq("user_id", user_id)\
+            # 1. Check current state in the watchlist
+            watchlist_res = (
+                self.dal.table("stocks_watchlist")
+                .select("*")
+                .eq("symbol", symbol)
+                .eq("user_id", user_id)
                 .execute()
+            )
 
             if not watchlist_res.data:
                 raise ValueError(f"No shares found for {symbol}")
 
             current_data = watchlist_res.data[0]
-            current_qty = current_data.get('amount', 0)
+            current_qty = current_data.get("amount", 0)
 
             if amount_to_sell > current_qty:
                 raise ValueError(f"Insufficient shares. Available: {current_qty}")
 
             new_qty = current_qty - amount_to_sell
 
-            # 2. ביצוע הפעולה: עדכון או מחיקה
+            # 2. Apply the action: update or delete
             if new_qty <= 0:
-                self.dal.table("stocks_watchlist").delete().eq("symbol", symbol).eq("user_id", user_id).execute()
+                self.dal.table("stocks_watchlist").delete().eq("symbol", symbol).eq(
+                    "user_id", user_id
+                ).execute()
             else:
-                self.dal.table("stocks_watchlist").update({"amount": new_qty}).eq("symbol", symbol).eq("user_id", user_id).execute()
+                self.dal.table("stocks_watchlist").update({"amount": new_qty}).eq(
+                    "symbol", symbol
+                ).eq("user_id", user_id).execute()
 
-            # 3. תיעוד האירוע בהיסטוריה
-            self.record_event(symbol, "STOCK_SOLD", {
-                "amount": amount_to_sell,
-                "price": current_price,
-                "total": amount_to_sell * current_price
-            }, user_id=user_id)
+            # 3. Log the event in history
+            self.record_event(
+                symbol,
+                "STOCK_SOLD",
+                {
+                    "amount": amount_to_sell,
+                    "price": current_price,
+                    "total": amount_to_sell * current_price,
+                },
+                user_id=user_id,
+            )
 
             return {"status": "success", "remaining_qty": new_qty}
 

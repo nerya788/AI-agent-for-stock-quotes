@@ -6,10 +6,10 @@ from server.dal.supabase_client import SupabaseDAL
 router = APIRouter(prefix="/trade", tags=["Trading"])
 
 stock_repo = StockRepository()
-dal = SupabaseDAL.get_instance()  # נשמור אותו רק בשביל ה-Saved Cards בינתיים
+dal = SupabaseDAL.get_instance()  # Keep this only for Saved Cards for now
 
 
-# --- מודלים ---
+# --- Models ---
 class PurchaseRequest(BaseModel):
     symbol: str
     price: float
@@ -30,18 +30,23 @@ class SaleRequest(BaseModel):
     user_id: str = None
 
 
-# --- נתיבים ---
+# --- Routes ---
 
 
 @router.post("/buy")
 async def buy_stock(req: PurchaseRequest):
     print(f"💰 API: Processing buy request for {req.symbol}...")
     try:
-        # 1. שמירת כרטיס בצורה בטוחה (ללא ON CONFLICT)
+        # 1. Securely save card (without ON CONFLICT)
         if req.save_card:
-            # בודקים אם למשתמש כבר יש כרטיס שמור
-            existing_card = dal.table("saved_cards").select("*").eq("user_id", req.user_id).execute()
-            
+            # Check whether the user already has a saved card
+            existing_card = (
+                dal.table("saved_cards")
+                .select("*")
+                .eq("user_id", req.user_id)
+                .execute()
+            )
+
             card_data = {
                 "user_id": req.user_id,
                 "card_holder": req.card_holder,
@@ -49,15 +54,17 @@ async def buy_stock(req: PurchaseRequest):
                 "expiration": req.expiration,
                 "cvv": req.cvv,
             }
-            
+
             if existing_card.data and len(existing_card.data) > 0:
-                # מעדכנים כרטיס קיים
-                dal.table("saved_cards").update(card_data).eq("user_id", req.user_id).execute()
+                # Update existing card
+                dal.table("saved_cards").update(card_data).eq(
+                    "user_id", req.user_id
+                ).execute()
             else:
-                # שומרים כרטיס חדש
+                # Insert new card
                 dal.table("saved_cards").insert(card_data).execute()
 
-        # 2. ביצוע הקנייה דרך ה-Repository
+        # 2. Execute the buy via the Repository
         stock_repo.buy_stock(
             symbol=req.symbol,
             price=req.price,
@@ -75,11 +82,12 @@ async def buy_stock(req: PurchaseRequest):
         print(f"❌ API Buy Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/sell")
 async def sell_stock(req: SaleRequest):
     print(f"📉 API: Requesting sale for {req.symbol}")
     try:
-        # --- הניקוי הגדול: קריאה אחת לפונקציה ב-Repo ---
+        # --- Cleanup: a single call into the Repo ---
         result = stock_repo.sell_stock(
             symbol=req.symbol,
             amount_to_sell=req.amount,
@@ -98,8 +106,8 @@ async def sell_stock(req: SaleRequest):
 
 @router.get("/cards/{user_id}")
 async def get_saved_card(user_id: str):
-    # כאן אפשר להשאיר את ה-dal או להעביר ל-Repo.
-    # לצורך הניקוי הנוכחי, נתמקד בזה שהמכירה והקנייה עברו ל-Repo.
+    # We can keep using `dal` here or move this into the Repo.
+    # For the current cleanup, we focused on moving buy/sell into the Repo.
     response = (
         dal.table("saved_cards").select("*").eq("user_id", user_id).limit(1).execute()
     )

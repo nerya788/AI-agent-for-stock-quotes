@@ -1,5 +1,6 @@
 import requests
 
+
 class APIClient:
     def __init__(self, base_url="http://127.0.0.1:8000"):
         self.base_url = base_url
@@ -7,28 +8,35 @@ class APIClient:
     # --- Auth ---
     def login(self, email, password):
         try:
-            response = requests.post(f"{self.base_url}/auth/login", json={
-                "email": email,
-                "password": password
-            })
-            return response.json() if response.status_code == 200 else {"status": "error", "detail": response.text}
+            response = requests.post(
+                f"{self.base_url}/auth/login",
+                json={"email": email, "password": password},
+            )
+            return (
+                response.json()
+                if response.status_code == 200
+                else {"status": "error", "detail": response.text}
+            )
         except Exception as e:
             return {"status": "error", "detail": str(e)}
 
     def register(self, email, password, full_name):
         try:
-            response = requests.post(f"{self.base_url}/auth/register", json={
-                "email": email,
-                "password": password,
-                "full_name": full_name
-            })
-            return response.json() if response.status_code == 200 else {"status": "error", "detail": response.text}
+            response = requests.post(
+                f"{self.base_url}/auth/register",
+                json={"email": email, "password": password, "full_name": full_name},
+            )
+            return (
+                response.json()
+                if response.status_code == 200
+                else {"status": "error", "detail": response.text}
+            )
         except Exception as e:
             return {"status": "error", "detail": str(e)}
 
-    # --- Watchlist (התיקון החדש) ---
+    # --- Watchlist (new fix) ---
     def get_watchlist(self, user_id):
-        """שליפת רשימת המעקב/פורטפוליו של המשתמש"""
+        """Fetch the user's watchlist/portfolio."""
         try:
             response = requests.get(f"{self.base_url}/stocks/watchlist/{user_id}")
             if response.status_code == 200:
@@ -64,9 +72,9 @@ class APIClient:
             return {"stocks": []}
 
     def get_stock_news(self, symbol, lang: str | None = None):
-        """חדשות מדורגות לפי חשיבות עבור מניה מסוימת.
+        """Importance-ranked news for a specific stock.
 
-        lang: 'en' (ברירת מחדל) או 'he' לתרגום לעברית בצד השרת.
+        lang: 'en' (default) or 'he' to translate to Hebrew on the server side.
         """
         try:
             url = f"{self.base_url}/stocks/news/{symbol}"
@@ -83,15 +91,19 @@ class APIClient:
     def get_ai_analysis(self, symbol):
         try:
             response = requests.get(f"{self.base_url}/stocks/analyze/{symbol}")
-            return response.json() if response.status_code == 200 else {"analysis": "Error"}
+            return (
+                response.json()
+                if response.status_code == 200
+                else {"analysis": "Error"}
+            )
         except Exception as e:
             return {"analysis": f"Connection error: {e}"}
 
     # --- Trade & Payments ---
     def get_saved_cards(self, user_id):
-        """קבלת כרטיסים שמורים (הנתיב המעודכן)"""
+        """Fetch saved cards (updated endpoint)."""
         try:
-            # שינינו ל-/trade/cards/
+            # Updated to /trade/cards/
             response = requests.get(f"{self.base_url}/trade/cards/{user_id}")
             if response.status_code == 200:
                 return response.json()
@@ -101,10 +113,12 @@ class APIClient:
             return {"status": "error", "data": None}
 
     def post_trade(self, mode, data):
-        """פונקציה גנרית לביצוע קנייה/מכירה"""
+        """Generic function to execute a buy/sell trade."""
         try:
-            # mode = 'buy' או 'sell'
-            response = requests.post(f"{self.base_url}/trade/{mode}", json=data, timeout=10)
+            # mode = 'buy' or 'sell'
+            response = requests.post(
+                f"{self.base_url}/trade/{mode}", json=data, timeout=10
+            )
             return response
         except Exception as e:
             print(f"API Error (Trade): {e}")

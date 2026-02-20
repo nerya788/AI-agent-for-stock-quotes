@@ -6,9 +6,9 @@ class ChartModel:
 
     @classmethod
     def from_json(cls, data: dict):
-        """ממיר את תשובת ה-Service/API לאובייקט מודל"""
+        """Convert the Service/API response into a model object."""
         return cls(
             symbol=data.get("symbol", ""),
             dates=data.get("dates", []),
-            prices=data.get("prices", [])
+            prices=data.get("prices", []),
         )

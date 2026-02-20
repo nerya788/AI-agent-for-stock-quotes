@@ -7,10 +7,10 @@ class UserModel:
 
     @classmethod
     def from_json(cls, data: dict):
-        """הופך את התשובה מהשרת (JSON) לאובייקט משתמש"""
+        """Convert the server response (JSON) into a user object."""
         return cls(
             id=data.get("id"),
             email=data.get("email"),
-            full_name=data.get("full_name", "Unknown"), # ברירת מחדל אם אין שם
-            token=data.get("access_token") # הכנה לעתיד
+            full_name=data.get("full_name", "Unknown"),  # Default if no name
+            token=data.get("access_token"),  # For future use
         )

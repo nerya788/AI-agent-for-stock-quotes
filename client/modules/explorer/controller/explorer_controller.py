@@ -6,6 +6,7 @@ from client.core.worker_thread import WorkerThread
 from PySide6.QtCore import Qt
 import requests
 
+
 class ExplorerController:
     def __init__(self, app_controller):
         self.app = app_controller
@@ -20,35 +21,41 @@ class ExplorerController:
         self.setup_connections()
 
     def setup_connections(self):
-        # חיבורים לכפתורים שנשארו
+        # Wire up the remaining buttons
         self.view.search_btn.clicked.connect(self.handle_search)
         self.view.back_btn.clicked.connect(self.handle_back)
         self.view.trade_btn.clicked.connect(self.open_trade_window)
         self.view.browse_btn.clicked.connect(self.show_popular_stocks)
-        
-        # חיבור לחיצה כפולה לפתיחת הלינק
+
+        # Double-click to open the news link
         self.view.news_list.itemDoubleClicked.connect(self.open_news_link)
 
     def _search_task(self, symbol):
         quote = self.api.get_live_quote(symbol)
         history = self.api.get_stock_history(symbol)
-        # מביא חדשות רגילות (מדורגות בשרת) ללא פרמטר שפה
-        news_data = self.api.get_stock_news(symbol) 
-        # בונוס: הפעלת AI אוטומטית (אם תרצה בעתיד) - כרגע לא מופעל
-        ai_analysis = self.api.get_ai_analysis(symbol).get('analysis', '')
-        return {"quote": quote, "history": history, "news": news_data, "analysis": ai_analysis}
+        # Fetch standard news (ranked on the server) without a language parameter
+        news_data = self.api.get_stock_news(symbol)
+        # Bonus: automatic AI analysis (if you want it later) - currently not enabled
+        ai_analysis = self.api.get_ai_analysis(symbol).get("analysis", "")
+        return {
+            "quote": quote,
+            "history": history,
+            "news": news_data,
+            "analysis": ai_analysis,
+        }
 
     def _browse_task(self):
         return self.api.get_popular_stocks()
 
     def handle_search(self):
         symbol = self.view.symbol_input.text().upper().strip()
-        if not symbol: return
+        if not symbol:
+            return
 
         self.current_symbol = symbol
         self.view.info_label.setText("Fetching data... 🚀")
         self.view.search_btn.setEnabled(False)
-        self.view.ai_result.setVisible(False) # איפוס תוצאת AI קודמת
+        self.view.ai_result.setVisible(False)  # Reset previous AI result
 
         self.search_worker = WorkerThread(self._search_task, symbol)
         self.search_worker.finished.connect(self.on_search_ready)
@@ -60,20 +67,22 @@ class ExplorerController:
         quote = data.get("quote")
 
         if quote:
-            self.view.info_label.setText(f"Stock: {quote['symbol']} | Price: ${quote['price']}")
+            self.view.info_label.setText(
+                f"Stock: {quote['symbol']} | Price: ${quote['price']}"
+            )
             self.view.trade_btn.setEnabled(True)
 
             history = data.get("history")
             if history:
-                prices = history.get('prices', [])
-                formatted_data = [{'price': p} for p in prices]
-                self.view.plot_chart(quote['symbol'], formatted_data)
+                prices = history.get("prices", [])
+                formatted_data = [{"price": p} for p in prices]
+                self.view.plot_chart(quote["symbol"], formatted_data)
 
             news_res = data.get("news", {})
             news_items = news_res.get("news", []) if isinstance(news_res, dict) else []
-            self.view.show_news_items(quote['symbol'], news_items)
-            
-            # אם תרצה להציג את הניתוח אוטומטית:
+            self.view.show_news_items(quote["symbol"], news_items)
+
+            # If you want to show the analysis automatically:
             analysis = data.get("analysis")
             if analysis:
                 self.view.ai_result.setVisible(False)
@@ -96,13 +105,19 @@ class ExplorerController:
         self.view.browse_btn.setEnabled(True)
         self.view.info_label.setText("Select a stock from the list")
 
-        stocks = result.get('stocks', []) if isinstance(result, dict) else []
+        stocks = result.get("stocks", []) if isinstance(result, dict) else []
         if not stocks:
             QMessageBox.warning(self.view, "No Results", "No popular stocks found.")
             return
 
-        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget,
-                                       QTableWidgetItem, QPushButton, QHeaderView)
+        from PySide6.QtWidgets import (
+            QDialog,
+            QVBoxLayout,
+            QTableWidget,
+            QTableWidgetItem,
+            QPushButton,
+            QHeaderView,
+        )
 
         dialog = QDialog(self.view)
         dialog.setWindowTitle("Browse Popular Stocks 📊")
@@ -110,7 +125,7 @@ class ExplorerController:
         dialog.setStyleSheet("background-color: #1e1e2e; color: white;")
 
         layout = QVBoxLayout(dialog)
-        
+
         table = QTableWidget()
         table.setColumnCount(4)
         table.setHorizontalHeaderLabels(["Symbol", "Name", "Price", "Action"])
@@ -118,13 +133,14 @@ class ExplorerController:
         table.setStyleSheet("QTableWidget { background-color: #313244; color: white; }")
 
         for row, stock in enumerate(stocks):
-            symbol = stock.get('symbol', 'N/A')
+            symbol = stock.get("symbol", "N/A")
             table.setItem(row, 0, QTableWidgetItem(symbol))
-            table.setItem(row, 1, QTableWidgetItem(stock.get('name', 'N/A')[:30]))
+            table.setItem(row, 1, QTableWidgetItem(stock.get("name", "N/A")[:30]))
             table.setItem(row, 2, QTableWidgetItem(f"${stock.get('price', 0)}"))
 
             btn = QPushButton("View")
-            btn.setStyleSheet("""
+            btn.setStyleSheet(
+                """
                 QPushButton {
                     background-color: #89b4fa; 
                     color: #1e1e2e;
@@ -136,8 +152,11 @@ class ExplorerController:
                 QPushButton:hover {
                     background-color: #b4befe;
                 }
-            """)
-            btn.clicked.connect(lambda ch, s=symbol: self.search_stock_from_browse(s, dialog))
+            """
+            )
+            btn.clicked.connect(
+                lambda ch, s=symbol: self.search_stock_from_browse(s, dialog)
+            )
             table.setCellWidget(row, 3, btn)
             btn.setCursor(Qt.PointingHandCursor)
 
@@ -151,7 +170,7 @@ class ExplorerController:
         self.handle_search()
 
     def handle_back(self):
-        if hasattr(self.app, 'navigate_to_portfolio'):
+        if hasattr(self.app, "navigate_to_portfolio"):
             self.app.navigate_to_portfolio()
 
     def open_trade_window(self):
@@ -160,6 +179,7 @@ class ExplorerController:
         try:
             price = float(price_text)
             from client.modules.trade.controller.trade_controller import TradeController
+
             trade_dialog = TradeController(self.view, self.app)
             trade_dialog.open_purchase_window(symbol, price)
         except ValueError:
@@ -167,7 +187,8 @@ class ExplorerController:
 
     def open_news_link(self, item):
         url = item.toolTip()
-        if url: webbrowser.open(url)
+        if url:
+            webbrowser.open(url)
 
     def on_error(self, error_msg):
         self.view.search_btn.setEnabled(True)

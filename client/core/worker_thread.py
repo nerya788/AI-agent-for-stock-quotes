@@ -1,9 +1,11 @@
 from PySide6.QtCore import QThread, Signal
 
+
 class WorkerThread(QThread):
     """
-    מחלקה שמריצה פונקציות ברקע כדי לא לתקוע את הממשק.
+    Runs functions in a background thread to keep the UI responsive.
     """
+
     finished = Signal(object)
     error = Signal(str)
 
@@ -15,7 +17,7 @@ class WorkerThread(QThread):
 
     def run(self):
         try:
-            # הרצת הפונקציה הכבדה
+            # Run the heavy function
             result = self.func(*self.args, **self.kwargs)
             self.finished.emit(result)
         except Exception as e:

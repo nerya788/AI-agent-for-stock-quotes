@@ -6,12 +6,11 @@ from server.services.ai_service import AIService
 from server.services.news_service import NewsService
 from server.repositories.stock_repository import StockRepository
 from server.dal.supabase_client import SupabaseDAL
-from datetime import datetime
 from server.services.agent_service import AgentService
 
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
 
-# אתחול השירותים
+# Service initialization
 stock_service = StockService()
 ai_service = AIService()
 news_service = NewsService()
@@ -20,7 +19,7 @@ stock_repo = StockRepository()
 dal = SupabaseDAL.get_instance()
 
 
-# מודלים
+# Models
 class StockEventRequest(BaseModel):
     user_id: str
     symbol: str
@@ -52,19 +51,21 @@ class ChatRequest(BaseModel):
     message: str
     user_id: str
 
+
 @router.post("/agent/chat", response_model=AgentResponse)
 async def chat_with_agent(request: ChatRequest):
     return agent_service.process_request(request.message, request.user_id)
 
-# --- 1. התיקון המקצועי לדשבורד ---
+
+# --- 1. Dashboard watchlist endpoint ---
 @router.get("/watchlist/{user_id}")
 async def get_watchlist(user_id: str):
     print(f"📊 API Layer: Requesting watchlist for user {user_id}")
     try:
-        # במקום לפנות ל-dal, פונים ל-Repository
+        # Instead of using `dal` directly, go through the Repository
         response = stock_repo.get_watchlist(user_id)
 
-        # ה-Repository מחזיר לנו אובייקט של Supabase, אנחנו מוציאים את ה-data
+        # The Repository returns a Supabase response object; we extract `.data`
         return {"status": "success", "data": response.data if response.data else []}
 
     except Exception as e:
@@ -72,7 +73,7 @@ async def get_watchlist(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- כל שאר הפונקציות המקוריות שלך נשארות כאן ---
+# --- All the other original endpoints remain here ---
 
 
 @router.get("/quote/{symbol}")
@@ -134,7 +135,7 @@ async def get_popular_stocks():
 async def record_stock_event(event: StockEventRequest):
     print(f"✅ API Layer: Recording event {event.event_type} for {event.symbol}")
     try:
-        # במקום ה-dal.table(...).insert הישן, משתמשים ב-Repo:
+        # Instead of the old dal.table(...).insert call, use the Repo:
         response = stock_repo.record_event(
             symbol=event.symbol,
             event_type=event.event_type,
@@ -173,12 +174,12 @@ async def analyze_stock(symbol: str):
 async def get_ranked_news_for_symbol(symbol: str):
     print(f"\n📡 DEBUG ROUTE: Fetching & Ranking news for {symbol}")
     try:
-        # 1. מביאים חדשות
+        # 1. Fetch news
         raw_news = news_service.get_company_news(symbol)
-        
-        # 2. שולחים לדירוג (ה-AI Service כבר מוגבל ל-10 כתבות כדי שיהיה מהיר)
+
+        # 2. Send for ranking (the AI Service is already limited to 10 items for speed)
         ranked_news = ai_service.rank_news_for_stock(symbol, raw_news)
-        
+
         print("📡 DEBUG ROUTE: Finished Ranking")
         return {"symbol": symbol.upper(), "news": ranked_news}
 
@@ -189,10 +190,11 @@ async def get_ranked_news_for_symbol(symbol: str):
 
 @router.post("/news/rank")
 async def rank_news(request: NewsRankingRequest):
-    """דירוג פיד חדשות למניה לפי חשיבות, באמצעות Hugging Face (או MOCK fallback).
+    """Rank a stock news feed by importance using Hugging Face (or a MOCK fallback).
 
-    ה-client יכול להביא חדשות מכל API חיצוני, לשלוח אלינו רשימת ידיעות,
-    ולקבל בחזרה את אותן ידיעות עם שדה importance_score וממויין מהכי חשוב לפחות חשוב.
+    The client can fetch news from any external API, send us a list of items,
+    and receive the same items back with an `importance_score` field, sorted
+    from most important to least important.
     """
     try:
         raw_items = [item.model_dump() for item in request.news]

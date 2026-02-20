@@ -66,38 +66,39 @@ GLOBAL_STYLE = """
     }
 """
 
+
 class AppController(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("StockQuotes Enterprise System")
         self.setFixedSize(1200, 800)
-        
+
         self.current_user = None
-        self.api = APIClient()  # יצירת instance של APIClient
+        self.api = APIClient()  # Create an APIClient instance
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
 
-        # אתחול המודולים
+        # Initialize modules
         self.auth_module = AuthController(self)
         self.portfolio_module = PortfolioController(self)
 
-        # יצירת ה-Explorer Controller (הוא ייצור את ה-View בפנים)
+        # Create the ExplorerController (it creates the View internally)
         self.explorer_controller = ExplorerController(self)
         self.explorer_view = self.explorer_controller.view
 
         self.advisor_module = AdvisorController(self)
 
-        # הוספה ל-Stack
-        self.stack.addWidget(self.auth_module)     # Index 0
-        self.stack.addWidget(self.portfolio_module) # Index 1
-        self.stack.addWidget(self.explorer_view)     # 2 - הוספת ה-View של ה-Explorer
-        self.stack.addWidget(self.advisor_module.view) # 3
-        
+        # Add widgets to the stack
+        self.stack.addWidget(self.auth_module)  # Index 0
+        self.stack.addWidget(self.portfolio_module)  # Index 1
+        self.stack.addWidget(self.explorer_view)  # 2 - add the Explorer View
+        self.stack.addWidget(self.advisor_module.view)  # 3
+
         self.stack.setCurrentWidget(self.auth_module)
-        
+
     def set_user_session(self, user_model):
-        """שמירת פרטי המשתמש המחובר"""
+        """Store the logged-in user's session details."""
         self.current_user = user_model
         self.setWindowTitle(f"StockQuotes Enterprise - {user_model.full_name}")
         print(f"🔑 Session Started for: {user_model.full_name}")
@@ -109,35 +110,35 @@ class AppController(QMainWindow):
             self.portfolio_module.show_dashboard()
 
     def navigate_to_explorer(self):
-            """מעבר למסך ה-Explorer"""
-            if hasattr(self, 'explorer_view'):
-                self.stack.setCurrentWidget(self.explorer_view)
-            else:
-                print("❌ Error: Explorer View not initialized")
-    
+        """Navigate to the Explorer screen."""
+        if hasattr(self, "explorer_view"):
+            self.stack.setCurrentWidget(self.explorer_view)
+        else:
+            print("❌ Error: Explorer View not initialized")
+
     def navigate_to_advisor(self):
-        """מעבר למסך ה-Advisor (אם צריך גישה ישירה)"""
-        if hasattr(self, 'advisor_module'):
+        """Navigate to the Advisor screen (if direct access is needed)."""
+        if hasattr(self, "advisor_module"):
             self.stack.setCurrentWidget(self.advisor_module.view)
-    
+
     def logout(self):
-        """התנתקות מהמערכת וחזרה למסך הכניסה"""
+        """Log out and return to the login screen."""
         self.current_user = None
-        self.setWindowTitle("StockQuotes Enterprise System") # איפוס כותרת
+        self.setWindowTitle("StockQuotes Enterprise System")  # Reset title
         print("🔒 User Logged Out")
-        
-        # חזרה למסך הלוגין (אינדקס 0 הוא ה-AuthModule)
+
+        # Return to the login screen (index 0 is the AuthModule)
         self.stack.setCurrentIndex(0)
-        
-        # איפוס הטופס בלוגין (דרך הגישה למודול)
-        if hasattr(self.auth_module, 'show_login'):
+
+        # Reset the login form (via the module)
+        if hasattr(self.auth_module, "show_login"):
             self.auth_module.show_login()
-    
+
     def handle_logout(self):
-        """מטפל בלחיצה על כפתור ההתנתקות"""
+        """Handle the logout button click."""
         print("👋 Portfolio: Logging out...")
-        # קריאה לפונקציה הראשית ב-AppController
-        if hasattr(self.app, 'logout'):
+        # Call the main logout function on the AppController
+        if hasattr(self.app, "logout"):
             self.app.logout()
         else:
             print("❌ Error: AppController does not have a logout method!")

@@ -1,7 +1,19 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QLineEdit, QPushButton, QCheckBox, QSpinBox, QComboBox, QFrame, QMessageBox)
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QCheckBox,
+    QSpinBox,
+    QComboBox,
+    QFrame,
+    QMessageBox,
+)
 from PySide6.QtCore import Qt, Signal, QRegularExpression
 from PySide6.QtGui import QRegularExpressionValidator, QFont
+
 
 class TradeView(QWidget):
     on_trade_clicked = Signal(dict)
@@ -17,11 +29,12 @@ class TradeView(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        # שינוי 1: ביטול גודל קבוע כדי למנוע חיתוך
+        # Change 1: remove fixed size to avoid clipping
         self.setMinimumSize(450, 650)
         self.resize(500, 700)
-        
-        self.setStyleSheet("""
+
+        self.setStyleSheet(
+            """
             QWidget { background-color: #1e1e2e; color: #cdd6f4; font-family: 'Segoe UI', sans-serif; }
             QLineEdit, QComboBox { 
                 background-color: #313244; border: 1px solid #45475a; 
@@ -29,7 +42,7 @@ class TradeView(QWidget):
             }
             QLineEdit:focus, QComboBox:focus { border: 1px solid #89b4fa; background-color: #45475a; }
             
-            /* שינוי 2: כפתורים בגודל בינוני (לא ענק ולא פיצי) */
+            /* Change 2: medium-sized buttons (not huge, not tiny) */
             QPushButton.qty-btn {
                 background-color: #fab387; color: #1e1e2e; font-size: 16px; font-weight: bold;
                 border-radius: 6px; min-width: 30px; min-height: 30px; margin: 0px;
@@ -43,33 +56,38 @@ class TradeView(QWidget):
             QSpinBox { 
                 background: transparent; border: none; color: white; font-size: 18px; font-weight: bold; 
             }
-        """)
+        """
+        )
 
         layout = QVBoxLayout()
-        layout.setSpacing(10) # צמצום רווחים
+        layout.setSpacing(10)  # Reduce spacing
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # כותרת
+        # Header
         self.header = QLabel("Trade Stock")
         self.header.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.header)
 
-        # מסגרת מידע
+        # Info frame
         info_frame = QFrame()
-        info_frame.setStyleSheet("background-color: #313244; border-radius: 8px; padding: 5px;")
+        info_frame.setStyleSheet(
+            "background-color: #313244; border-radius: 8px; padding: 5px;"
+        )
         info_layout = QHBoxLayout(info_frame)
-        
+
         self.symbol_label = QLabel("SYMBOL")
-        self.symbol_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #89b4fa; border: none;")
+        self.symbol_label.setStyleSheet(
+            "font-size: 24px; font-weight: bold; color: #89b4fa; border: none;"
+        )
         self.price_label = QLabel("$0.00")
         self.price_label.setStyleSheet("font-size: 24px; color: #fab387; border: none;")
-        
+
         info_layout.addWidget(self.symbol_label)
         info_layout.addStretch()
         info_layout.addWidget(self.price_label)
         layout.addWidget(info_frame)
 
-        # סטטוסים
+        # Status labels
         self.available_label = QLabel("")
         self.available_label.setStyleSheet("color: #a6e3a1; font-size: 13px;")
         layout.addWidget(self.available_label)
@@ -79,7 +97,7 @@ class TradeView(QWidget):
 
         layout.addSpacing(5)
 
-        # אזור הכמות
+        # Quantity section
         qty_layout = QHBoxLayout()
         qty_layout.addWidget(QLabel("Quantity:"))
         qty_layout.addStretch()
@@ -94,7 +112,7 @@ class TradeView(QWidget):
         self.amount_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.amount_spin.setRange(1, 100000)
         self.amount_spin.setValue(1)
-        self.amount_spin.setFixedWidth(80) # רוחב קבוע שלא יתפזר
+        self.amount_spin.setFixedWidth(80)  # Fixed width for consistent layout
         self.amount_spin.valueChanged.connect(self.update_total)
 
         self.btn_plus = QPushButton("+")
@@ -107,11 +125,13 @@ class TradeView(QWidget):
         qty_layout.addWidget(self.btn_plus)
         layout.addLayout(qty_layout)
 
-        # סה"כ
+        # Total
         total_layout = QHBoxLayout()
         self.total_title = QLabel("Total:")
         self.total_label = QLabel("$0.00")
-        self.total_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #a6e3a1;")
+        self.total_label.setStyleSheet(
+            "font-size: 20px; font-weight: bold; color: #a6e3a1;"
+        )
         total_layout.addWidget(self.total_title)
         total_layout.addStretch()
         total_layout.addWidget(self.total_label)
@@ -124,33 +144,37 @@ class TradeView(QWidget):
         self.saved_cards_combo.currentIndexChanged.connect(self.on_card_selected)
         layout.addWidget(self.saved_cards_combo)
 
-        # שדות אשראי
+        # Card fields
         self.card_widget = QWidget()
         card_layout = QVBoxLayout(self.card_widget)
-        card_layout.setContentsMargins(0,0,0,0)
+        card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(8)
 
         self.card_holder = QLineEdit()
         self.card_holder.setPlaceholderText("Card Holder Name")
-        # ולידציה 1: רק אותיות
-        self.card_holder.setValidator(QRegularExpressionValidator(QRegularExpression("[a-zA-Z ]+")))
-        
+        # Validation 1: letters only
+        self.card_holder.setValidator(
+            QRegularExpressionValidator(QRegularExpression("[a-zA-Z ]+"))
+        )
+
         self.card_number = QLineEdit()
         self.card_number.setPlaceholderText("Card Number (16 digits)")
         self.card_number.setMaxLength(16)
-        # ולידציה 2: רק מספרים
-        self.card_number.setValidator(QRegularExpressionValidator(QRegularExpression("[0-9]+")))
-        
+        # Validation 2: digits only
+        self.card_number.setValidator(
+            QRegularExpressionValidator(QRegularExpression("[0-9]+"))
+        )
+
         row_expiry = QHBoxLayout()
         self.expiration = QLineEdit()
         self.expiration.setPlaceholderText("MM/YY")
         self.expiration.setInputMask("99/99;_")
-        
+
         self.cvv = QLineEdit()
         self.cvv.setPlaceholderText("CVV")
         self.cvv.setMaxLength(3)
         self.cvv.setValidator(QRegularExpressionValidator(QRegularExpression("[0-9]+")))
-        
+
         row_expiry.addWidget(self.expiration)
         row_expiry.addWidget(self.cvv)
 
@@ -166,33 +190,38 @@ class TradeView(QWidget):
 
         btn_layout = QHBoxLayout()
         self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setStyleSheet("background-color: #45475a; padding: 10px; border-radius: 6px;")
+        self.cancel_btn.setStyleSheet(
+            "background-color: #45475a; padding: 10px; border-radius: 6px;"
+        )
         self.cancel_btn.clicked.connect(self.on_cancel_clicked.emit)
 
         self.action_btn = QPushButton("CONFIRM")
         self.action_btn.setProperty("class", "action-btn")
         self.action_btn.setCursor(Qt.PointingHandCursor)
         self.action_btn.clicked.connect(self.handle_action)
-        
+
         btn_layout.addWidget(self.cancel_btn)
         btn_layout.addWidget(self.action_btn)
         layout.addLayout(btn_layout)
 
         self.setLayout(layout)
 
-    # --- לוגיקה ---
+    # --- Logic ---
     def _increase_qty(self):
         self.amount_spin.setValue(self.amount_spin.value() + 1)
 
     def _decrease_qty(self):
         val = self.amount_spin.value()
-        if val > 1: self.amount_spin.setValue(val - 1)
+        if val > 1:
+            self.amount_spin.setValue(val - 1)
 
     def set_mode(self, mode):
         self.trade_mode = mode
         if mode == "buy":
             self.header.setText("Buy Stock")
-            self.header.setStyleSheet("font-size: 22px; font-weight: bold; color: #a6e3a1;")
+            self.header.setStyleSheet(
+                "font-size: 22px; font-weight: bold; color: #a6e3a1;"
+            )
             self.action_btn.setText("BUY NOW")
             self.action_btn.setStyleSheet("background-color: #a6e3a1; color: #1e1e2e;")
             self.available_label.hide()
@@ -200,19 +229,23 @@ class TradeView(QWidget):
             self.amount_spin.setRange(1, 100000)
         else:
             self.header.setText("Sell Stock")
-            self.header.setStyleSheet("font-size: 22px; font-weight: bold; color: #f38ba8;")
+            self.header.setStyleSheet(
+                "font-size: 22px; font-weight: bold; color: #f38ba8;"
+            )
             self.action_btn.setText("SELL NOW")
             self.action_btn.setStyleSheet("background-color: #f38ba8; color: #1e1e2e;")
             self.available_label.show()
             self.pnl_label.show()
 
-    def set_stock_data(self, symbol, current_price, available_qty=0, buy_price=0, event_id=None):
+    def set_stock_data(
+        self, symbol, current_price, available_qty=0, buy_price=0, event_id=None
+    ):
         self.symbol_label.setText(symbol)
         self.price_label.setText(f"${current_price:.2f}")
         self.current_unit_price = current_price
         self.buy_price = buy_price
         self.event_id = event_id
-        
+
         if self.trade_mode == "sell":
             self.amount_spin.setRange(1, int(available_qty))
             self.amount_spin.setValue(1)
@@ -230,28 +263,28 @@ class TradeView(QWidget):
     def load_saved_cards(self, cards):
 
         self.saved_cards_data = cards
-        
-        # איפוס הקומבו-בוקס
+
+        # Reset the combo box
         self.saved_cards_combo.blockSignals(True)
         self.saved_cards_combo.clear()
-        self.saved_cards_combo.addItem("Enter New Card") # אינדקס 0
-        
-        # בדיקה האם הרשימה ריקה
+        self.saved_cards_combo.addItem("Enter New Card")  # Index 0
+
+        # If list is empty, stop here
         if not cards:
             self.saved_cards_combo.blockSignals(False)
             return
 
-        # הוספת הכרטיסים
+        # Add cards
         for i, card in enumerate(cards):
-            last4 = card.get('card_number', '????')[-4:]
+            last4 = card.get("card_number", "????")[-4:]
             self.saved_cards_combo.addItem(f"**** {last4}")
-            
+
         self.saved_cards_combo.blockSignals(False)
 
         if self.saved_cards_combo.count() > 1:
             self.saved_cards_combo.setCurrentIndex(1)
-            
-            # הפעלה ידנית של הפונקציה שממלאת את השדות
+
+            # Manually trigger field fill
             self.on_card_selected(1)
 
     def on_card_selected(self, index):
@@ -262,13 +295,13 @@ class TradeView(QWidget):
             self.cvv.clear()
         elif index - 1 < len(self.saved_cards_data):
             card = self.saved_cards_data[index - 1]
-            self.card_holder.setText(card.get('card_holder', ''))
-            self.card_number.setText(card.get('card_number', ''))
-            self.expiration.setText(card.get('expiration', ''))
-            self.cvv.setText(card.get('cvv', ''))
+            self.card_holder.setText(card.get("card_holder", ""))
+            self.card_number.setText(card.get("card_number", ""))
+            self.expiration.setText(card.get("expiration", ""))
+            self.cvv.setText(card.get("cvv", ""))
 
     def handle_action(self):
-        # --- שינוי 3: ולידציה קפדנית כאן לפני השליחה! ---
+        # --- Change 3: strict validation before submitting ---
         if not self.card_holder.text().strip():
             QMessageBox.warning(self, "Error", "Card Holder Name is required.")
             return
@@ -277,16 +310,18 @@ class TradeView(QWidget):
             QMessageBox.warning(self, "Error", "Card number must be 16 digits.")
             return
 
-        # בדיקת תאריך (חודש 1-12)
-        exp = self.expiration.text() # בגלל המסכה זה יהיה משהו כמו "12/25"
+        # Validate expiry date (month 1-12)
+        exp = (
+            self.expiration.text()
+        )  # With input mask this will be something like "12/25"
         try:
-            month = int(exp.split('/')[0])
+            month = int(exp.split("/")[0])
             if month < 1 or month > 12:
                 QMessageBox.warning(self, "Error", "Invalid Month (01-12).")
                 return
         except ValueError:
-             QMessageBox.warning(self, "Error", "Invalid Date.")
-             return
+            QMessageBox.warning(self, "Error", "Invalid Date.")
+            return
 
         data = {
             "symbol": self.symbol_label.text(),
@@ -299,6 +334,6 @@ class TradeView(QWidget):
             "cvv": self.cvv.text(),
             "save_card": self.save_card_chk.isChecked(),
             "buy_price": self.buy_price,
-            "event_id": self.event_id
+            "event_id": self.event_id,
         }
         self.on_trade_clicked.emit(data)
